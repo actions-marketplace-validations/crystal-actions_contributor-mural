@@ -1,0 +1,55 @@
+source: both
+style: grid
+output: docs/HALL_OF_FAME.svg
+
+users:
+  - login: hahwul
+    name: HAHWUL
+    weight: 10
+    link: https://www.hahwul.com
+  - login: octocat
+    avatar_url: https://example.com/a.png
+
+contributors:
+  repo: hahwul/hall-of-fame
+  include_bots: true
+  include_anonymous: true
+  max: 50
+
+exclude:
+  - dependabot[bot]
+
+sort: weight
+limit: 60
+fail_on_missing: true
+
+outputs:
+  - path: docs/grid.svg
+  - path: docs/hex.svg
+    style: honeycomb
+  - path: docs/mosaic.svg
+    style: mosaic
+
+grid:
+  columns: 10
+  avatar_size: 72
+  shape: rounded
+  margin: 6
+  show_names: false
+  truncate: 20
+
+honeycomb:
+  columns: 7
+  cell_size: 80
+  gap: 6
+
+mosaic:
+  width: 640
+  base_cell: 40
+  tiers: [4, 2, 1]
+  gap: 3
+
+theme:
+  background: "#0d1117"
+  label_color: "#8b949e"
+  font_family: "monospace"

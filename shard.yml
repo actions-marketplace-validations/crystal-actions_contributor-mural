@@ -1,0 +1,21 @@
+name: hall-of-fame
+version: 0.1.0
+
+authors:
+  - HAHWUL <hahwul@gmail.com>
+
+description: |
+  Generate avatar-wall art (grid, honeycomb, mosaic SVG) for your repository's hall of fame.
+
+license: MIT
+
+crystal: ">= 1.10.0"
+
+targets:
+  hall-of-fame:
+    main: src/main.cr
+
+development_dependencies:
+  ameba:
+    github: crystal-ameba/ameba
+    branch: master

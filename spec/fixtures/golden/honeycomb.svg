@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="196" height="189.21" viewBox="0 0 196 189.21">
+  <defs><clipPath id="hex-clip" clipPathUnits="objectBoundingBox"><polygon points="0.5,0 1,0.25 1,0.75 0.5,1 0,0.75 0,0.25"/></clipPath></defs>
+  <a href="https://github.com/one" target="_blank">
+    <title>one</title>
+    <image href="data:image/png;base64,SU1HOm9uZToxMjA=" x="4" y="4" width="60" height="69.28" preserveAspectRatio="xMidYMid slice" clip-path="url(#hex-clip)"/>
+  </a>
+  <a href="https://github.com/two" target="_blank">
+    <title>two</title>
+    <image href="data:image/png;base64,SU1HOnR3bzoxMjA=" x="68" y="4" width="60" height="69.28" preserveAspectRatio="xMidYMid slice" clip-path="url(#hex-clip)"/>
+  </a>
+  <a href="https://github.com/three" target="_blank">
+    <title>three</title>
+    <image href="data:image/png;base64,SU1HOnRocmVlOjEyMA==" x="132" y="4" width="60" height="69.28" preserveAspectRatio="xMidYMid slice" clip-path="url(#hex-clip)"/>
+  </a>
+  <a href="https://github.com/four" target="_blank">
+    <title>four</title>
+    <image href="data:image/png;base64,SU1HOmZvdXI6MTIw" x="36" y="59.96" width="60" height="69.28" preserveAspectRatio="xMidYMid slice" clip-path="url(#hex-clip)"/>
+  </a>
+  <a href="https://github.com/five" target="_blank">
+    <title>five</title>
+    <image href="data:image/png;base64,SU1HOmZpdmU6MTIw" x="100" y="59.96" width="60" height="69.28" preserveAspectRatio="xMidYMid slice" clip-path="url(#hex-clip)"/>
+  </a>
+  <a href="https://github.com/six" target="_blank">
+    <title>six</title>
+    <image href="data:image/png;base64,SU1HOnNpeDoxMjA=" x="4" y="115.92" width="60" height="69.28" preserveAspectRatio="xMidYMid slice" clip-path="url(#hex-clip)"/>
+  </a>
+  <a href="https://github.com/seven" target="_blank">
+    <title>seven</title>
+    <image href="data:image/png;base64,SU1HOnNldmVuOjEyMA==" x="68" y="115.92" width="60" height="69.28" preserveAspectRatio="xMidYMid slice" clip-path="url(#hex-clip)"/>
+  </a>
+</svg>

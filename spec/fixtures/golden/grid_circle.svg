@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="296" height="188" viewBox="0 0 296 188">
+  <defs><clipPath id="avatar-clip" clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="0.5"/></clipPath></defs>
+  <a href="https://github.com/hahwul" target="_blank">
+    <title>HAHWUL (@hahwul)</title>
+    <image href="data:image/png;base64,SU1HOmhhaHd1bDoxMjg=" x="8" y="8" width="64" height="64" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatar-clip)"/>
+    <text x="40" y="85" text-anchor="middle" font-family="-apple-system, &#39;Segoe UI&#39;, Helvetica, Arial, sans-serif" font-size="11" fill="#57606a">HAHWUL</text>
+  </a>
+  <a href="https://github.com/octocat" target="_blank">
+    <title>The Octocat (@octocat)</title>
+    <image href="data:image/png;base64,SU1HOm9jdG9jYXQ6MTI4" x="80" y="8" width="64" height="64" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatar-clip)"/>
+    <text x="112" y="85" text-anchor="middle" font-family="-apple-system, &#39;Segoe UI&#39;, Helvetica, Arial, sans-serif" font-size="11" fill="#57606a">The Octocat</text>
+  </a>
+  <a href="https://github.com/long-name-user" target="_blank">
+    <title>An Extremely Long Display Name (@long-name-user)</title>
+    <image href="data:image/png;base64,SU1HOmxvbmctbmFtZS11c2VyOjEyOA==" x="152" y="8" width="64" height="64" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatar-clip)"/>
+    <text x="184" y="85" text-anchor="middle" font-family="-apple-system, &#39;Segoe UI&#39;, Helvetica, Arial, sans-serif" font-size="11" fill="#57606a">An Extremel…</text>
+  </a>
+  <a href="https://github.com/escaper" target="_blank">
+    <title>R&amp;D &lt;Team&gt; (@escaper)</title>
+    <image href="data:image/png;base64,SU1HOmVzY2FwZXI6MTI4" x="224" y="8" width="64" height="64" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatar-clip)"/>
+    <text x="256" y="85" text-anchor="middle" font-family="-apple-system, &#39;Segoe UI&#39;, Helvetica, Arial, sans-serif" font-size="11" fill="#57606a">R&amp;D &lt;Team&gt;</text>
+  </a>
+  <a href="https://github.com/hangul" target="_blank">
+    <title>한글이름 (@hangul)</title>
+    <image href="data:image/png;base64,SU1HOmhhbmd1bDoxMjg=" x="8" y="98" width="64" height="64" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatar-clip)"/>
+    <text x="40" y="175" text-anchor="middle" font-family="-apple-system, &#39;Segoe UI&#39;, Helvetica, Arial, sans-serif" font-size="11" fill="#57606a">한글이름</text>
+  </a>
+  <a href="https://github.com/plain" target="_blank">
+    <title>plain</title>
+    <image href="data:image/png;base64,SU1HOnBsYWluOjEyOA==" x="80" y="98" width="64" height="64" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatar-clip)"/>
+    <text x="112" y="175" text-anchor="middle" font-family="-apple-system, &#39;Segoe UI&#39;, Helvetica, Arial, sans-serif" font-size="11" fill="#57606a">plain</text>
+  </a>
+</svg>

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="170" height="338" viewBox="0 0 170 338">
+  <defs><clipPath id="cell-clip" clipPathUnits="objectBoundingBox"><rect width="1" height="1" rx="0.08"/></clipPath></defs>
+  <a href="https://github.com/alpha" target="_blank">
+    <title>alpha</title>
+    <image href="data:image/png;base64,SU1HOmFscGhhOjI0MA==" x="2" y="2" width="124" height="124" preserveAspectRatio="xMidYMid slice" clip-path="url(#cell-clip)"/>
+  </a>
+  <a href="https://github.com/bravo" target="_blank">
+    <title>bravo</title>
+    <image href="data:image/png;base64,SU1HOmJyYXZvOjI0MA==" x="2" y="128" width="124" height="124" preserveAspectRatio="xMidYMid slice" clip-path="url(#cell-clip)"/>
+  </a>
+  <a href="https://github.com/charlie" target="_blank">
+    <title>charlie</title>
+    <image href="data:image/png;base64,SU1HOmNoYXJsaWU6MTYw" x="2" y="254" width="82" height="82" preserveAspectRatio="xMidYMid slice" clip-path="url(#cell-clip)"/>
+  </a>
+  <a href="https://github.com/delta" target="_blank">
+    <title>delta</title>
+    <image href="data:image/png;base64,SU1HOmRlbHRhOjE2MA==" x="86" y="254" width="82" height="82" preserveAspectRatio="xMidYMid slice" clip-path="url(#cell-clip)"/>
+  </a>
+  <a href="https://github.com/echo" target="_blank">
+    <title>echo</title>
+    <image href="data:image/png;base64,SU1HOmVjaG86ODA=" x="128" y="2" width="40" height="40" preserveAspectRatio="xMidYMid slice" clip-path="url(#cell-clip)"/>
+  </a>
+  <a href="https://github.com/foxtrot" target="_blank">
+    <title>foxtrot</title>
+    <image href="data:image/png;base64,SU1HOmZveHRyb3Q6ODA=" x="128" y="44" width="40" height="40" preserveAspectRatio="xMidYMid slice" clip-path="url(#cell-clip)"/>
+  </a>
+</svg>

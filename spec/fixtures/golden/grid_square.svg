@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="316" height="56" viewBox="0 0 316 56">
+  <rect width="100%" height="100%" fill="#0d1117"/>
+  <a href="https://github.com/hahwul" target="_blank">
+    <title>HAHWUL (@hahwul)</title>
+    <image href="data:image/png;base64,SU1HOmhhaHd1bDo5Ng==" x="4" y="4" width="48" height="48" preserveAspectRatio="xMidYMid slice"/>
+  </a>
+  <a href="https://github.com/octocat" target="_blank">
+    <title>The Octocat (@octocat)</title>
+    <image href="data:image/png;base64,SU1HOm9jdG9jYXQ6OTY=" x="56" y="4" width="48" height="48" preserveAspectRatio="xMidYMid slice"/>
+  </a>
+  <a href="https://github.com/long-name-user" target="_blank">
+    <title>An Extremely Long Display Name (@long-name-user)</title>
+    <image href="data:image/png;base64,SU1HOmxvbmctbmFtZS11c2VyOjk2" x="108" y="4" width="48" height="48" preserveAspectRatio="xMidYMid slice"/>
+  </a>
+  <a href="https://github.com/escaper" target="_blank">
+    <title>R&amp;D &lt;Team&gt; (@escaper)</title>
+    <image href="data:image/png;base64,SU1HOmVzY2FwZXI6OTY=" x="160" y="4" width="48" height="48" preserveAspectRatio="xMidYMid slice"/>
+  </a>
+  <a href="https://github.com/hangul" target="_blank">
+    <title>한글이름 (@hangul)</title>
+    <image href="data:image/png;base64,SU1HOmhhbmd1bDo5Ng==" x="212" y="4" width="48" height="48" preserveAspectRatio="xMidYMid slice"/>
+  </a>
+  <a href="https://github.com/plain" target="_blank">
+    <title>plain</title>
+    <image href="data:image/png;base64,SU1HOnBsYWluOjk2" x="264" y="4" width="48" height="48" preserveAspectRatio="xMidYMid slice"/>
+  </a>
+</svg>
