@@ -1,0 +1,20 @@
+name: Hall of Fame
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hall-of-fame
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate hall of fame
+        uses: ./

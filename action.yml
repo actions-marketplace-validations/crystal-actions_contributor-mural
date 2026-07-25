@@ -1,0 +1,37 @@
+name: Hall of Fame
+description: Generate an avatar-wall SVG (grid, honeycomb, or mosaic) from a user list or repository contributors
+author: hahwul
+
+branding:
+  icon: award
+  color: yellow
+
+inputs:
+  config:
+    description: Path to the config YAML
+    required: false
+    default: .github/hall-of-fame.yml
+  token:
+    description: Token used for the contributors API (only needed for source contributors/both)
+    required: false
+    default: ${{ github.token }}
+  no_commit:
+    description: Generate the files but skip commit/push
+    required: false
+    default: "false"
+  commit_message:
+    description: Commit message for the generated files
+    required: false
+    default: "chore: update hall of fame"
+
+outputs:
+  svg_path:
+    description: Comma-separated paths of the generated SVG files
+  user_count:
+    description: Number of users rendered
+  changed:
+    description: Whether the files changed and were committed
+
+runs:
+  using: docker
+  image: Dockerfile

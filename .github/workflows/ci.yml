@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: latest
+      - name: Install dependencies
+        run: shards install
+      - name: Check formatting
+        run: crystal tool format --check
+      - name: Lint
+        run: |
+          [ -x bin/ameba ] || crystal build lib/ameba/bin/ameba.cr -o bin/ameba --release
+          bin/ameba src spec
+      - name: Run specs
+        run: crystal spec --order=random
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t hall-of-fame:ci .
+      - name: Smoke test
+        run: |
+          mkdir -p /tmp/ws
+          printf 'users:\n  - login: hahwul\n  - login: octocat\n' > /tmp/ws/config.yml
+          docker run --rm -w /ws -v /tmp/ws:/ws \
+            -e INPUT_CONFIG=config.yml -e INPUT_NO_COMMIT=true -e GITHUB_WORKSPACE=/ws \
+            hall-of-fame:ci
+          grep -q "data:image" /tmp/ws/HALL_OF_FAME.svg
