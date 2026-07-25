@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hahwul/hall-of-fame@v0
+      - uses: crystal-actions/hall-of-fame@v0
 ```
 
 Then embed the result in your README:
@@ -156,7 +156,7 @@ crystal tool format
 bin/ameba src spec
 ```
 
-Release flow: pushing a `v*` tag builds a multi-arch image to `ghcr.io/hahwul/hall-of-fame` and force-moves the major tag (`v0`, `v1`, …). The image is pushed before the git tag moves, so the moving tag always references an existing image.
+Release flow: pushing a `v*` tag builds a multi-arch image to `ghcr.io/crystal-actions/hall-of-fame` and force-moves the major tag (`v0`, `v1`, …). The image is pushed before the git tag moves, so the moving tag always references an existing image.
 
 ## License
 
