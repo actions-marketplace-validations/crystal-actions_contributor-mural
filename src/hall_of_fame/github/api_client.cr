@@ -112,6 +112,7 @@ module HallOfFame
           link: dto.html_url || "https://github.com/#{login}",
           avatar_url: dto.avatar_url,
           weight: Math.max(dto.contributions, 1),
+          group: @options.group,
         )
       else
         return unless @options.include_anonymous?
@@ -121,6 +122,7 @@ module HallOfFame
           link: "https://github.com/#{repo}/commits?author=#{URI.encode_www_form(dto.email || seed)}",
           avatar_url: "https://github.com/identicons/#{URI.encode_path_segment(seed)}.png",
           weight: Math.max(dto.contributions, 1),
+          group: @options.group,
         )
       end
     end

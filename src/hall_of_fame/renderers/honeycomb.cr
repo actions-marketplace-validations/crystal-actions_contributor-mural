@@ -11,7 +11,15 @@ module HallOfFame::Renderers
       @config.honeycomb.cell_size * 2
     end
 
-    def render(users : Array(EmbeddedUser)) : String
+    protected def title_inset : Float64
+      @config.honeycomb.gap.to_f
+    end
+
+    protected def defs(io : String::Builder) : Nil
+      io << %(  <defs><clipPath id="#{CLIP_ID}" clipPathUnits="objectBoundingBox"><polygon points="#{CLIP_POINTS}"/></clipPath></defs>\n)
+    end
+
+    protected def block_size(users : Array(EmbeddedUser)) : {Float64, Float64}
       hc = @config.honeycomb
       cell_w = hc.cell_size.to_f
       cell_h = cell_w * 2 / Math.sqrt(3.0)
@@ -22,20 +30,27 @@ module HallOfFame::Renderers
       rows_used = cells.empty? ? 0 : cells.last[0] + 1
       width = gap + hc.columns * (cell_w + gap)
       height = rows_used.zero? ? gap * 2 : gap + (rows_used - 1) * pitch + cell_h + gap
+      {width, height}
+    end
 
-      SVG.document(width, height, theme.background) do |io|
-        io << %(  <defs><clipPath id="#{CLIP_ID}" clipPathUnits="objectBoundingBox"><polygon points="#{CLIP_POINTS}"/></clipPath></defs>\n)
-        users.each_with_index do |user, index|
-          row, col = cells[index]
-          x = gap + col * (cell_w + gap)
-          x += (cell_w + gap) / 2 if row.odd? && hc.columns > 1
-          y = gap + row * pitch
+    protected def draw_block(io : String::Builder, users : Array(EmbeddedUser), y_offset : Float64) : Nil
+      hc = @config.honeycomb
+      cell_w = hc.cell_size.to_f
+      cell_h = cell_w * 2 / Math.sqrt(3.0)
+      gap = hc.gap.to_f
+      pitch = 0.75 * cell_h + gap
+      cells = positions(users.size, hc.columns)
 
-          io << %(  <a href="#{SVG.escape(user.link)}" target="_blank">\n)
-          io << %(    <title>#{SVG.escape(title_for(user))}</title>\n)
-          io << %(    <image href="#{user.data_uri}" x="#{SVG.num(x)}" y="#{SVG.num(y)}" width="#{SVG.num(cell_w)}" height="#{SVG.num(cell_h)}" preserveAspectRatio="xMidYMid slice" clip-path="url(##{CLIP_ID})"/>\n)
-          io << "  </a>\n"
-        end
+      users.each_with_index do |user, index|
+        row, col = cells[index]
+        x = gap + col * (cell_w + gap)
+        x += (cell_w + gap) / 2 if row.odd? && hc.columns > 1
+        y = gap + row * pitch + y_offset
+
+        io << %(  <a href="#{SVG.escape(user.link)}" target="_blank">\n)
+        io << %(    <title>#{SVG.escape(title_for(user))}</title>\n)
+        io << %(    <image href="#{user.data_uri}" x="#{SVG.num(x)}" y="#{SVG.num(y)}" width="#{SVG.num(cell_w)}" height="#{SVG.num(cell_h)}" preserveAspectRatio="xMidYMid slice" clip-path="url(##{CLIP_ID})"/>\n)
+        io << "  </a>\n"
       end
     end
 

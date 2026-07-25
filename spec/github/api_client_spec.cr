@@ -110,6 +110,15 @@ describe HallOfFame::GitHubApi do
     end
   end
 
+  it "assigns the configured group to fetched contributors" do
+    pages = {1 => "[#{contributor_json("alice", 3)}]"}
+    with_api_server(pages) do |base, _seen|
+      options = options_from("contributors:\n  group: Contributors")
+      users = HallOfFame::GitHubApi.new(options: options, api_base: base).contributors("o/r")
+      users[0].group.should eq("Contributors")
+    end
+  end
+
   it "sends the token as a bearer authorization" do
     pages = {1 => "[]"}
     with_api_server(pages) do |base, seen|

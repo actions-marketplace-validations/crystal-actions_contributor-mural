@@ -98,4 +98,66 @@ describe HallOfFame::Resolver do
     api = [api_user("worker")]
     HallOfFame::Resolver.resolve(config, api).map(&.login).should eq(["worker"])
   end
+
+  it "carries role and group through resolution" do
+    config = config_from(<<-YAML)
+      sort: none
+      users:
+        - login: hahwul
+          role: Creator
+          group: Core
+      YAML
+
+    user = HallOfFame::Resolver.resolve(config).first
+    user.role.should eq("Creator")
+    user.group.should eq("Core")
+  end
+end
+
+private def embedded(login : String, group : String? = nil) : HallOfFame::EmbeddedUser
+  HallOfFame::EmbeddedUser.new(HallOfFame::ResolvedUser.new(login, group: group), "data:,")
+end
+
+describe "HallOfFame::Resolver.grouped" do
+  it "returns one unnamed section when no groups are used" do
+    config = HallOfFame::Config.from_yaml("users:\n  - login: a")
+    users = [embedded("a"), embedded("b")]
+    sections = HallOfFame::Resolver.grouped(users, config)
+    sections.size.should eq(1)
+    sections[0][0].should be_nil
+    sections[0][1].map(&.login).should eq(["a", "b"])
+  end
+
+  it "orders sections by the explicit groups list, ungrouped first" do
+    config = HallOfFame::Config.from_yaml(<<-YAML)
+      groups: [Core, Thanks]
+      users:
+        - login: a
+      YAML
+    users = [embedded("t1", "Thanks"), embedded("c1", "Core"), embedded("solo")]
+    sections = HallOfFame::Resolver.grouped(users, config)
+    sections.map(&.first).should eq([nil, "Core", "Thanks"])
+    sections[2][1].map(&.login).should eq(["t1"])
+  end
+
+  it "falls back to first-appearance order from the config" do
+    config = HallOfFame::Config.from_yaml(<<-YAML)
+      users:
+        - login: b1
+          group: Beta
+        - login: a1
+          group: Alpha
+      contributors:
+        group: Devs
+      YAML
+    users = [embedded("a1", "Alpha"), embedded("b1", "Beta"), embedded("d1", "Devs")]
+    sections = HallOfFame::Resolver.grouped(users, config)
+    sections.map(&.first).should eq(["Beta", "Alpha", "Devs"])
+  end
+
+  it "drops empty sections" do
+    config = HallOfFame::Config.from_yaml("groups: [Ghost]\nusers:\n  - login: a")
+    sections = HallOfFame::Resolver.grouped([embedded("a")], config)
+    sections.map(&.first).should eq([nil])
+  end
 end

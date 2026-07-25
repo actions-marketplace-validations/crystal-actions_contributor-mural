@@ -1,8 +1,9 @@
 module HallOfFame::Renderers
   # Weight-tiered collage: heavier users occupy larger squares. Tier spans
-  # come from weight rank (top fraction gets tiers[0], and so on); cells are
-  # packed first-fit onto a unit grid in list order, so placement is
-  # deterministic and follows the configured sort.
+  # come from weight rank across the whole render (top fraction gets
+  # tiers[0], and so on); each section is packed first-fit onto its own unit
+  # grid in list order, so placement is deterministic and follows the
+  # configured sort.
   class Mosaic < Renderer
     CLIP_ID = "cell-clip"
 
@@ -21,32 +22,48 @@ module HallOfFame::Renderers
       span_for(user.login) * @config.mosaic.base_cell * 2
     end
 
-    def render(users : Array(EmbeddedUser)) : String
+    protected def title_inset : Float64
+      @config.mosaic.gap.to_f
+    end
+
+    protected def defs(io : String::Builder) : Nil
+      io << %(  <defs><clipPath id="#{CLIP_ID}" clipPathUnits="objectBoundingBox"><rect width="1" height="1" rx="0.08"/></clipPath></defs>\n)
+    end
+
+    protected def block_size(users : Array(EmbeddedUser)) : {Float64, Float64}
       mosaic = @config.mosaic
       unit = mosaic.base_cell + mosaic.gap
-      columns = Math.max((mosaic.width + mosaic.gap) // unit, max_span(users))
+      columns = column_count(users)
+      spans = users.map { |user| span_for(user.login) }
+      cells = pack(spans, columns)
+      rows_used = cells.each_with_index.max_of? { |(cell, index)| cell[0] + spans[index] } || 0
+      {(mosaic.gap + columns * unit).to_f, (mosaic.gap + rows_used * unit).to_f}
+    end
+
+    protected def draw_block(io : String::Builder, users : Array(EmbeddedUser), y_offset : Float64) : Nil
+      mosaic = @config.mosaic
+      unit = mosaic.base_cell + mosaic.gap
+      columns = column_count(users)
       spans = users.map { |user| span_for(user.login) }
       cells = pack(spans, columns)
 
-      rows_used = cells.each_with_index.max_of? { |(cell, index)| cell[0] + spans[index] } || 0
-      width = mosaic.gap + columns * unit
-      height = mosaic.gap + rows_used * unit
+      users.each_with_index do |user, index|
+        row, col = cells[index]
+        span = spans[index]
+        x = mosaic.gap + col * unit
+        y = mosaic.gap + row * unit + y_offset
+        size = span * mosaic.base_cell + (span - 1) * mosaic.gap
 
-      SVG.document(width, height, theme.background) do |io|
-        io << %(  <defs><clipPath id="#{CLIP_ID}" clipPathUnits="objectBoundingBox"><rect width="1" height="1" rx="0.08"/></clipPath></defs>\n)
-        users.each_with_index do |user, index|
-          row, col = cells[index]
-          span = spans[index]
-          x = mosaic.gap + col * unit
-          y = mosaic.gap + row * unit
-          size = span * mosaic.base_cell + (span - 1) * mosaic.gap
-
-          io << %(  <a href="#{SVG.escape(user.link)}" target="_blank">\n)
-          io << %(    <title>#{SVG.escape(title_for(user))}</title>\n)
-          io << %(    <image href="#{user.data_uri}" x="#{x}" y="#{y}" width="#{size}" height="#{size}" preserveAspectRatio="xMidYMid slice" clip-path="url(##{CLIP_ID})"/>\n)
-          io << "  </a>\n"
-        end
+        io << %(  <a href="#{SVG.escape(user.link)}" target="_blank">\n)
+        io << %(    <title>#{SVG.escape(title_for(user))}</title>\n)
+        io << %(    <image href="#{user.data_uri}" x="#{SVG.num(x)}" y="#{SVG.num(y)}" width="#{size}" height="#{size}" preserveAspectRatio="xMidYMid slice" clip-path="url(##{CLIP_ID})"/>\n)
+        io << "  </a>\n"
       end
+    end
+
+    private def column_count(users : Array(EmbeddedUser)) : Int32
+      mosaic = @config.mosaic
+      Math.max((mosaic.width + mosaic.gap) // (mosaic.base_cell + mosaic.gap), max_span(users))
     end
 
     private def span_for(login : String) : Int32

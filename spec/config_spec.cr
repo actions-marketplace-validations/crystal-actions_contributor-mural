@@ -99,6 +99,56 @@ describe HallOfFame::Config do
       message.should contain("grid `columns` must be >= 1")
     end
 
+    it "parses role and group fields" do
+      config = HallOfFame::Config.from_yaml(<<-YAML)
+        groups: [Contributors, Special Thanks]
+        users:
+          - login: hahwul
+            role: Creator
+            group: Contributors
+          - login: octocat
+            group: Special Thanks
+        contributors:
+          group: Contributors
+        YAML
+
+      config.validate!
+      config.users[0].role.should eq("Creator")
+      config.users[0].group.should eq("Contributors")
+      config.users[1].role.should be_nil
+      config.contributors.group.should eq("Contributors")
+      config.groups.should eq(["Contributors", "Special Thanks"])
+    end
+
+    it "rejects group values missing from an explicit groups list" do
+      config = HallOfFame::Config.from_yaml(<<-YAML)
+        groups: [Contributors]
+        users:
+          - login: hahwul
+            group: Contributrs
+        contributors:
+          group: Nope
+        YAML
+
+      error = expect_raises(HallOfFame::ConfigError) { config.validate! }
+      message = error.message || ""
+      message.should contain(%(group "Contributrs" is not listed))
+      message.should contain(%(contributors: group "Nope" is not listed))
+    end
+
+    it "rejects duplicate or empty groups entries" do
+      config = HallOfFame::Config.from_yaml(<<-YAML)
+        groups: [A, A, " "]
+        users:
+          - login: hahwul
+        YAML
+
+      error = expect_raises(HallOfFame::ConfigError) { config.validate! }
+      message = error.message || ""
+      message.should contain("must not be empty")
+      message.should contain("duplicate `groups`")
+    end
+
     it "rejects non-svg output paths" do
       config = HallOfFame::Config.from_yaml(<<-YAML)
         output: art.png

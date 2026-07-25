@@ -8,7 +8,7 @@ private def render_honeycomb(config : HallOfFame::Config) : String
   renderer.prepare(users)
   embedded, _ = HallOfFame::Embedder.new(FakeAvatarSource.new)
     .embed(users, renderer, fail_on_missing: false)
-  renderer.render(embedded)
+  renderer.render(HallOfFame::Resolver.grouped(embedded, config))
 end
 
 describe HallOfFame::Renderers::Honeycomb do
@@ -59,6 +59,29 @@ describe HallOfFame::Renderers::Honeycomb do
     svg.should contain(%(x="36" y="59.96"))
     # Row 2 returns to x=4 at double pitch.
     svg.should contain(%(x="4" y="115.92"))
+  end
+
+  it "stacks grouped sections with titles" do
+    config = HallOfFame::Config.from_yaml(<<-YAML)
+      style: honeycomb
+      sort: none
+      users:
+        - login: a
+          group: One
+        - login: b
+          group: Two
+      honeycomb:
+        columns: 3
+        cell_size: 60
+        gap: 4
+      YAML
+
+    svg = render_honeycomb(config)
+    svg.should contain(">One</text>")
+    svg.should contain(">Two</text>")
+    svg.scan(/<defs>/).size.should eq(1)
+    # Second section's hex sits below title(30) + block(~77.28) + gap(12) + title(30)
+    svg.should contain(%(y="153.28"))
   end
 
   it "fetches avatars at twice the cell size" do

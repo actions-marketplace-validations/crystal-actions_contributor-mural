@@ -50,6 +50,7 @@ module HallOfFame
     property output : String = "HALL_OF_FAME.svg"
     property outputs : Array(OutputEntry)? = nil
     property users : Array(UserEntry) = [] of UserEntry
+    property groups : Array(String)? = nil
     property contributors : ContributorsConfig = ContributorsConfig.new
     property exclude : Array(String) = [] of String
     property sort : SortMode = SortMode::Weight
@@ -90,6 +91,7 @@ module HallOfFame
 
       validate_users(errors)
       validate_outputs(errors)
+      validate_groups(errors)
 
       if lim = limit
         errors << "`limit` must be >= 1" if lim < 1
@@ -110,6 +112,23 @@ module HallOfFame
         errors << "duplicate user login: #{user.login}" unless seen.add?(user.login.downcase)
         if weight = user.weight
           errors << "user #{user.login}: `weight` must be >= 1" if weight < 1
+        end
+      end
+    end
+
+    private def validate_groups(errors : Array(String)) : Nil
+      if explicit = groups
+        errors << "`groups` entries must not be empty" if explicit.any?(&.strip.empty?)
+        errors << "duplicate `groups` entries" if explicit.uniq.size != explicit.size
+
+        known = explicit.to_set
+        users.each do |user|
+          if group = user.group
+            errors << "user #{user.login}: group #{group.inspect} is not listed in `groups`" unless known.includes?(group)
+          end
+        end
+        if group = contributors.group
+          errors << "contributors: group #{group.inspect} is not listed in `groups`" unless known.includes?(group)
         end
       end
     end
@@ -147,6 +166,8 @@ module HallOfFame
     property link : String? = nil
     property avatar_url : String? = nil
     property weight : Int32? = nil
+    property role : String? = nil
+    property group : String? = nil
   end
 
   class ContributorsConfig
@@ -157,6 +178,7 @@ module HallOfFame
     property? include_bots : Bool = false
     property? include_anonymous : Bool = false
     property max : Int32 = 100
+    property group : String? = nil
 
     def initialize
     end
@@ -238,6 +260,8 @@ module HallOfFame
 
     property background : String = "transparent"
     property label_color : String = "#57606a"
+    property role_color : String = "#6e7781"
+    property title_color : String = "#24292f"
     property font_family : String = "-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
 
     def initialize

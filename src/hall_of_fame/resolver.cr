@@ -37,7 +37,40 @@ module HallOfFame
         link: entry.link || "https://github.com/#{entry.login}",
         avatar_url: entry.avatar_url || base.try(&.avatar_url),
         weight: entry.weight || base.try(&.weight) || 1,
+        role: entry.role || base.try(&.role),
+        group: entry.group || base.try(&.group),
       )
+    end
+
+    # Splits embedded users into ordered (title, members) sections. Ungrouped
+    # users come first without a heading; explicit `groups` fixes the order,
+    # otherwise groups appear as first mentioned in the config.
+    def self.grouped(users : Array(EmbeddedUser), config : Config) : Array({String?, Array(EmbeddedUser)})
+      order = group_order(config)
+      users.each do |user|
+        order << user.group unless order.includes?(user.group)
+      end
+      order.compact_map do |group|
+        members = users.select { |user| user.group == group }
+        {group, members} unless members.empty?
+      end
+    end
+
+    private def self.group_order(config : Config) : Array(String?)
+      order = [nil] of String?
+      if explicit = config.groups
+        explicit.each { |group| order << group }
+      else
+        config.users.each do |user|
+          if group = user.group
+            order << group unless order.includes?(group)
+          end
+        end
+        if group = config.contributors.group
+          order << group unless order.includes?(group)
+        end
+      end
+      order
     end
 
     private def self.sort(users : Array(ResolvedUser), mode : SortMode) : Array(ResolvedUser)

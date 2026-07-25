@@ -29,7 +29,7 @@ module HallOfFame
 
         full_path = File.join(@workspace, path)
         Dir.mkdir_p(File.dirname(full_path))
-        File.write(full_path, renderer.render(embedded))
+        File.write(full_path, renderer.render(Resolver.grouped(embedded, @config)))
         written_paths << path
       end
 

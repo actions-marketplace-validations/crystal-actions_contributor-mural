@@ -7,7 +7,7 @@ private def render(config : HallOfFame::Config) : String
   renderer = HallOfFame::Renderer.for(config.style, config)
   embedded, _ = HallOfFame::Embedder.new(FakeAvatarSource.new)
     .embed(users, renderer, fail_on_missing: false)
-  renderer.render(embedded)
+  renderer.render(HallOfFame::Resolver.grouped(embedded, config))
 end
 
 private GOLDEN_USERS = <<-YAML
@@ -81,5 +81,55 @@ describe HallOfFame::Renderers::Grid do
       .render([] of HallOfFame::EmbeddedUser)
     svg.should contain("<svg")
     svg.should_not contain("<image")
+  end
+
+  it "renders role lines and taller cells for sections with roles" do
+    config = HallOfFame::Config.from_yaml(<<-YAML)
+      sort: none
+      users:
+        - login: hahwul
+          name: HAHWUL
+          role: Creator
+        - login: octocat
+      grid:
+        columns: 2
+        avatar_size: 64
+        margin: 8
+      YAML
+
+    svg = render(config)
+    svg.should contain(%(font-size="9"))
+    svg.should contain(">Creator</text>")
+    svg.should contain(%(fill="#6e7781"))
+    # label area grows 18 -> 32: height = 1 row * (64+32) + 2*8 = 112
+    svg.should contain(%(height="112"))
+    svg.should contain("<title>HAHWUL (@hahwul) · Creator</title>")
+    Golden.assert("grid_roles.svg", svg)
+  end
+
+  it "renders titled sections for grouped users" do
+    config = HallOfFame::Config.from_yaml(<<-YAML)
+      sort: none
+      groups: [Contributors, Special Thanks]
+      users:
+        - login: hahwul
+          group: Contributors
+        - login: octocat
+          group: Contributors
+        - login: torvalds
+          role: Sponsor
+          group: Special Thanks
+      grid:
+        columns: 4
+        avatar_size: 64
+        margin: 8
+      YAML
+
+    svg = render(config)
+    svg.should contain(">Contributors</text>")
+    svg.should contain(">Special Thanks</text>")
+    svg.scan(/font-weight="600"/).size.should eq(2)
+    svg.scan(/<defs>/).size.should eq(1)
+    Golden.assert("grid_groups.svg", svg)
   end
 end

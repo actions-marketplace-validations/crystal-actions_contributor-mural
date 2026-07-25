@@ -7,7 +7,8 @@ Generate avatar-wall art for your repository — a "hall of fame" of the people 
 | ![grid](examples/grid.svg) | ![honeycomb](examples/honeycomb.svg) | ![mosaic](examples/mosaic.svg) |
 
 - **Three styles** — classic grid (circle/rounded/square), honeycomb hexagons, and a weight-tiered mosaic where your top contributors literally loom larger.
-- **YAML-first** — curate the list yourself (`users`), pull it from the contributors API (`contributors`), or merge both. Weights, display names, links, and avatar overrides per user.
+- **YAML-first** — curate the list yourself (`users`), pull it from the contributors API (`contributors`), or merge both. Weights, display names, links, roles, and avatar overrides per user.
+- **Sections & roles** — split the wall into titled groups (say, *Contributors* and *Special Thanks*) and tag people with a role line (*Creator*, *Design*, *Docs*) — made for honoring the folks the contributors API can't see.
 - **Self-contained SVGs** — avatars are embedded as base64 data URIs, so the image renders anywhere GitHub shows it (READMEs included, where external loads are blocked).
 - **Zero-dependency binary** — pure Crystal stdlib, packaged as a small Alpine container.
 
@@ -82,14 +83,19 @@ users:                      # your curated list (source: list/both)
   - login: hahwul           # required — GitHub login
     name: HAHWUL            # optional display name (default: login)
     weight: 10              # optional, drives mosaic sizing + weight sort
+    role: Creator           # optional label under the name (grid) / in tooltips
+    group: Contributors     # optional section this user renders in
     link: https://hahwul.com          # optional (default: the GitHub profile)
     avatar_url: https://…/custom.png  # optional avatar override
+
+groups: [Contributors, Special Thanks]  # optional: section order (and typo guard)
 
 contributors:               # used when source is contributors/both
   repo: owner/name          # default: the current repository
   include_bots: false       # keep type=Bot / *[bot] accounts
   include_anonymous: false  # include anonymous (email-only) contributors
   max: 100                  # cap fetched contributors; contributions become weight
+  group: Contributors       # optional section for API-fetched users
 
 exclude:                    # drop logins from any source
   - dependabot[bot]
@@ -125,10 +131,12 @@ mosaic:
 theme:
   background: transparent
   label_color: "#57606a"
+  role_color: "#6e7781"     # the role line under names
+  title_color: "#24292f"    # section titles
   font_family: "-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
 ```
 
-When `source: both`, your `users` entries win over API data field by field — set a custom `name` or `weight` while the contribution count fills everyone else's.
+When `source: both`, your `users` entries win over API data field by field — set a custom `name` or `weight` while the contribution count fills everyone else's. Users without a `group` render first in an untitled section; groups follow the `groups` order (or first mention in the config). This is the recipe for honoring people the API misses — unlinked commit emails, design or docs work: add them to `users` with a `role` and their own section.
 
 ## Notes
 

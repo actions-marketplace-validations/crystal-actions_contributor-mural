@@ -6,9 +6,11 @@ module HallOfFame
     getter link : String
     getter avatar_url : String?
     getter weight : Int32
+    getter role : String?
+    getter group : String?
 
     def initialize(@login, @name = login, @link = "https://github.com/#{login}",
-                   @avatar_url = nil, @weight = 1)
+                   @avatar_url = nil, @weight = 1, @role = nil, @group = nil)
     end
   end
 
@@ -17,7 +19,7 @@ module HallOfFame
     getter user : ResolvedUser
     getter data_uri : String
 
-    delegate login, name, link, weight, to: @user
+    delegate login, name, link, weight, role, group, to: @user
 
     def initialize(@user, @data_uri)
     end
