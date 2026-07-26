@@ -178,6 +178,51 @@ describe HallOfFame::Runner do
     end
   end
 
+  it "always reports `changed`, including when committing is off" do
+    yaml = <<-YAML
+      users:
+        - login: alpha
+      YAML
+
+    run_in_tmp(yaml) do |exit_code, outputs, _workspace|
+      exit_code.should eq(0)
+      outputs.should contain("changed=false")
+      outputs.should contain("paths=HALL_OF_FAME.svg")
+    end
+  end
+
+  it "refuses to overwrite an existing wall when every source is empty" do
+    yaml = <<-YAML
+      output: wall.svg
+      users:
+        - login: alpha
+      exclude: [alpha]
+      YAML
+
+    run_in_tmp(yaml) do |exit_code, _outputs, workspace|
+      File.write(File.join(workspace, "wall.svg"), "PRECIOUS")
+      exit_code.should eq(1)
+      File.read(File.join(workspace, "wall.svg")).should eq("PRECIOUS")
+      HallOfFame::Annotations.io.to_s.should contain("no users to render")
+    end
+  end
+
+  it "writes nothing when a later output cannot be produced" do
+    yaml = <<-YAML
+      outputs:
+        - path: first.svg
+        - path: second.png
+      users:
+        - login: alpha
+      YAML
+
+    run_in_tmp(yaml) do |exit_code, _outputs, workspace|
+      exit_code.should eq(1)
+      File.exists?(File.join(workspace, "first.svg")).should be_false
+      HallOfFame::Annotations.io.to_s.should contain("no rasterizer is available")
+    end
+  end
+
   it "fails cleanly when contributors are requested without API access" do
     yaml = <<-YAML
       source: contributors

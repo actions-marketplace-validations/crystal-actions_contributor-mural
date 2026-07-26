@@ -32,7 +32,12 @@ module HallOfFame
       end
 
       sized = groups.map { |(title, users)| {title, users, block_size(users)} }
-      width = sized.max_of { |(_title, _users, size)| size[0] }
+      width = sized.max_of do |(title, _users, size)|
+        # Section titles are left-aligned at title_inset and can run wider
+        # than the avatar grid itself.
+        title_width = title ? title_inset * 2 + text_width(title, 14.0) : 0.0
+        Math.max(size[0], title_width)
+      end
       height = 0.0
       sized.each_with_index do |(title, _users, size), index|
         height += SECTION_GAP if index.positive?
@@ -123,9 +128,20 @@ module HallOfFame
       end
     end
 
+    # `limit == 0` means no truncation; below 2 there is no room for an
+    # ellipsis, so cut plainly rather than rendering a bare "…".
     protected def truncate(name : String, limit : Int32) : String
-      return name if limit == 0 || name.size <= limit
+      return name if limit <= 0 || name.size <= limit
+      return name[0, limit] if limit < 2
       "#{name[0, limit - 1]}…"
+    end
+
+    # Rough advance width for the label fonts (no font metrics available at
+    # render time); used to widen the canvas so labels are not clipped.
+    protected def text_width(text : String, font_size : Float64) : Float64
+      # CJK and other wide scripts occupy roughly a full em.
+      units = text.each_char.sum { |char| char.ord > 0x2E80 ? 1.0 : 0.55 }
+      units * font_size
     end
 
     protected def title_for(user : EmbeddedUser) : String

@@ -60,10 +60,47 @@ describe HallOfFame::Config do
       end
     end
 
-    it "fails when source list has no users" do
-      expect_raises(HallOfFame::ConfigError, /non-empty `users`/) do
+    it "fails when no source would produce any user" do
+      expect_raises(HallOfFame::ConfigError, /nothing to render/) do
         HallOfFame::Config.load(SpecHelper.fixture("configs", "invalid_no_users.yml"))
       end
+    end
+
+    it "accepts an API-only source without a users list" do
+      config = HallOfFame::Config.from_yaml("stargazers:\n  repo: o/r")
+      config.validate!
+      config.api_sources?.should be_true
+    end
+
+    it "explains that `source: contributors` drops the users list" do
+      config = HallOfFame::Config.from_yaml(<<-YAML)
+        source: contributors
+        users:
+          - login: hahwul
+        YAML
+
+      expect_raises(HallOfFame::ConfigError, /ignores the `users` list/) { config.validate! }
+    end
+
+    it "flags a contributors block that `source` never fetches" do
+      config = HallOfFame::Config.from_yaml(<<-YAML)
+        users:
+          - login: hahwul
+        contributors:
+          repo: o/r
+        YAML
+
+      expect_raises(HallOfFame::ConfigError, /`contributors` block is set but `source`/) { config.validate! }
+    end
+
+    it "names the accepted values for a misspelled enum" do
+      error = expect_raises(HallOfFame::ConfigError) do
+        HallOfFame::Config.load(SpecHelper.fixture("configs", "invalid_style.yml"))
+      end
+      message = error.message || ""
+      message.should contain(%(unknown value "cubism"))
+      message.should contain("grid, honeycomb, mosaic")
+      message.should_not contain("HallOfFame::Style")
     end
 
     it "fails on an unknown style" do
@@ -100,11 +137,12 @@ describe HallOfFame::Config do
       message = error.message || ""
       message.should contain("`weight` must be >= 1")
       message.should contain("`limit` must be >= 1")
-      message.should contain("grid `columns` must be >= 1")
+      message.should contain("grid `columns` must be between 1 and 100")
     end
 
     it "parses role and group fields" do
       config = HallOfFame::Config.from_yaml(<<-YAML)
+        source: both
         groups: [Contributors, Special Thanks]
         users:
           - login: hahwul

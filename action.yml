@@ -8,15 +8,18 @@ branding:
 
 inputs:
   config:
-    description: Path to the config YAML
+    description: Path to the config YAML, relative to the repository root
     required: false
     default: .github/hall-of-fame.yml
   token:
-    description: Token used for the contributors API (only needed for source contributors/both)
+    description: >-
+      Token for the GitHub API. Required for the sponsors source; also raises
+      rate limits and grants access to private repositories for the
+      contributors, members, and stargazers sources.
     required: false
     default: ${{ github.token }}
   no_commit:
-    description: Generate the files but skip commit/push
+    description: Generate the files but skip commit/push (must be true or false)
     required: false
     default: "false"
   commit_message:
@@ -25,12 +28,14 @@ inputs:
     default: "chore: update hall of fame"
 
 outputs:
+  paths:
+    description: Comma-separated paths of the generated files (SVG and PNG)
   svg_path:
-    description: Comma-separated paths of the generated SVG files
+    description: Deprecated alias for `paths`, kept for existing workflows
   user_count:
-    description: Number of users rendered
+    description: Number of users rendered in the last output
   changed:
-    description: Whether the files changed and were committed
+    description: Whether the files changed and were committed (false when no_commit is set)
 
 runs:
   using: docker

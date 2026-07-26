@@ -28,14 +28,20 @@ module HallOfFame
     # Inside the action, commit by default unless the `no_commit` input is
     # set. On a local run, only commit when --commit was passed.
     private def self.resolve_commit(commit_flag : Bool) : Bool
-      return false if env_bool("INPUT_NO_COMMIT") == true
+      return false if env_bool("INPUT_NO_COMMIT")
       commit_flag || ENV["GITHUB_ACTIONS"]? == "true"
     end
 
-    private def self.env_bool(name : String) : Bool?
-      case ENV[name]?.try(&.strip.downcase)
+    # Strict on purpose: `no_commit` exists to prevent a push, so a typo like
+    # "tru" must not silently fall through to committing.
+    private def self.env_bool(name : String) : Bool
+      value = ENV[name]?.try(&.strip.downcase)
+      return false if value.nil? || value.empty?
+      case value
       when "true", "1", "yes" then true
       when "false", "0", "no" then false
+      else
+        raise ConfigError.new("#{name} must be true or false, got #{value.inspect}")
       end
     end
   end

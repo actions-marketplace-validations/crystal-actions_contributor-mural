@@ -22,6 +22,15 @@ private def with_test_server(&)
     when "/loop"
       context.response.status_code = 302
       context.response.headers["Location"] = "/loop"
+    when "/bad-mime"
+      context.response.headers["Content-Type"] = "@@@"
+      context.response.print "DATA"
+    when "/html"
+      context.response.content_type = "text/html"
+      context.response.print "<b>nope</b>"
+    when "/redirect-internal"
+      context.response.status_code = 302
+      context.response.headers["Location"] = "https://127.0.0.1/secret.png"
     when "/missing"
       context.response.status_code = 404
     when "/flaky"
@@ -95,6 +104,38 @@ describe HallOfFame::HTTPAvatarSource do
         HallOfFame::HTTPAvatarSource.new.fetch(user_with("assets/logo.bmp"), 64)
       end
     end
+
+    it "refuses symlinks pointing outside the workspace" do
+      workspace = File.tempname("hof_symlink")
+      outside = File.tempname("hof_outside")
+      Dir.mkdir_p(File.join(workspace, "assets"))
+      File.write(outside, "SECRET")
+      File.symlink(outside, File.join(workspace, "assets/logo.png"))
+      begin
+        expect_raises(HallOfFame::AvatarError, /escapes the repository/) do
+          HallOfFame::HTTPAvatarSource.new(workspace).fetch(user_with("assets/logo.png"), 64)
+        end
+      ensure
+        FileUtils.rm_rf(workspace)
+        File.delete?(outside)
+      end
+    end
+
+    it "turns unreadable files into AvatarError instead of crashing the fiber" do
+      workspace = File.tempname("hof_perm")
+      Dir.mkdir_p(File.join(workspace, "assets"))
+      path = File.join(workspace, "assets/logo.png")
+      File.write(path, "x")
+      File.chmod(path, 0o000)
+      begin
+        expect_raises(HallOfFame::AvatarError, /could not be read/) do
+          HallOfFame::HTTPAvatarSource.new(workspace).fetch(user_with("assets/logo.png"), 64)
+        end
+      ensure
+        File.chmod(path, 0o644) rescue nil
+        FileUtils.rm_rf(workspace)
+      end
+    end
   end
 
   describe "#fetch" do
@@ -109,7 +150,7 @@ describe HallOfFame::HTTPAvatarSource do
 
     it "follows absolute and relative redirects" do
       with_test_server do |base, _requests|
-        source = HallOfFame::HTTPAvatarSource.new(backoff_base: 0.seconds)
+        source = HallOfFame::HTTPAvatarSource.new(backoff_base: 0.seconds, allow_local_redirects: true)
         bytes, _ = source.fetch(user_with("#{base}/redirect"), 64)
         String.new(bytes).should eq("JPEGDATA")
 
@@ -120,7 +161,7 @@ describe HallOfFame::HTTPAvatarSource do
 
     it "gives up on redirect loops" do
       with_test_server do |base, _requests|
-        source = HallOfFame::HTTPAvatarSource.new(backoff_base: 0.seconds)
+        source = HallOfFame::HTTPAvatarSource.new(backoff_base: 0.seconds, allow_local_redirects: true)
         expect_raises(HallOfFame::AvatarError, /too many redirects/) do
           source.fetch(user_with("#{base}/loop"), 64)
         end
@@ -135,6 +176,29 @@ describe HallOfFame::HTTPAvatarSource do
         end
         error.status.should eq(404)
         requests.count("/missing").should eq(1)
+      end
+    end
+
+    it "falls back to image/png for malformed or non-image content types" do
+      with_test_server do |base, _requests|
+        source = HallOfFame::HTTPAvatarSource.new(backoff_base: 0.seconds)
+        # `@@@` makes MIME parsing raise; `text/html` is simply not an image.
+        _, content_type = source.fetch(user_with("#{base}/bad-mime"), 64)
+        content_type.should eq("image/png")
+        _, content_type = source.fetch(user_with("#{base}/html"), 64)
+        content_type.should eq("image/png")
+      end
+    end
+
+    it "refuses redirects that leave https or target internal addresses" do
+      with_test_server do |base, _requests|
+        source = HallOfFame::HTTPAvatarSource.new(backoff_base: 0.seconds)
+        expect_raises(HallOfFame::AvatarError, /non-https avatar redirect/) do
+          source.fetch(user_with("#{base}/redirect"), 64)
+        end
+        expect_raises(HallOfFame::AvatarError, /internal address/) do
+          source.fetch(user_with("#{base}/redirect-internal"), 64)
+        end
       end
     end
 

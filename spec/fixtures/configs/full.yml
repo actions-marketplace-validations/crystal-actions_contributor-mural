@@ -1,6 +1,5 @@
 source: both
 style: grid
-output: docs/HALL_OF_FAME.svg
 
 users:
   - login: hahwul

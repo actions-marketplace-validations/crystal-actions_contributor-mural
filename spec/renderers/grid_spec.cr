@@ -40,7 +40,8 @@ describe HallOfFame::Renderers::Grid do
       YAML
 
     svg = render(config)
-    svg.should contain(%(width="296" height="188"))
+    # 296px of avatars + a 4.3px gutter each side so 12-char labels are not clipped
+    svg.should contain(%(width="304.6" height="188"))
     svg.should contain("data:image/png;base64,")
     svg.should contain(%(clip-path="url(#avatar-clip)"))
     svg.should contain("R&amp;D &lt;Team&gt;")

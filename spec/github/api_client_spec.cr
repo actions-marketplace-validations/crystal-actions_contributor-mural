@@ -247,6 +247,35 @@ describe "HallOfFame::GitHubApi extra sources" do
     end
   end
 
+  it "skips sponsors whose entity is hidden" do
+    hidden = {
+      data: {repositoryOwner: {sponsorshipsAsMaintainer: {
+        pageInfo: {hasNextPage: false, endCursor: nil},
+        nodes:    [{tier: nil, sponsorEntity: nil}, {tier: {monthlyPriceInDollars: 3}, sponsorEntity: {login: "visible"}}],
+      }}},
+    }.to_json
+    with_sources_server([hidden]) do |base, _seen|
+      config = config_with("sponsors:\n  login: hahwul")
+      users = HallOfFame::GitHubApi.new(token: "tok", config: config, api_base: base).sponsors("hahwul")
+      users.map(&.login).should eq(["visible"])
+    end
+  end
+
+  it "stops paginating sponsors when the cursor does not advance" do
+    stuck = {
+      data: {repositoryOwner: {sponsorshipsAsMaintainer: {
+        pageInfo: {hasNextPage: true, endCursor: nil},
+        nodes:    [{tier: nil, sponsorEntity: {login: "a"}}],
+      }}},
+    }.to_json
+    with_sources_server([stuck, stuck, stuck]) do |base, seen|
+      config = config_with("sponsors:\n  login: hahwul\n  max: 50")
+      users = HallOfFame::GitHubApi.new(token: "tok", config: config, api_base: base).sponsors("hahwul")
+      users.map(&.login).should eq(["a"])
+      seen.count(&.starts_with?("POST /graphql")).should eq(1)
+    end
+  end
+
   it "requires a token for sponsors" do
     config = config_with("sponsors:\n  login: hahwul")
     expect_raises(HallOfFame::ApiError, /requires a `token`/) do

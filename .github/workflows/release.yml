@@ -20,9 +20,16 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Reject anything that is not a plain semver tag before it reaches a
+      # shell, a docker tag list, or a git ref downstream.
       - name: Compute tags
         id: meta
-        run: echo "major=${GITHUB_REF_NAME%%.*}" >> "$GITHUB_OUTPUT"
+        run: |
+          case "$GITHUB_REF_NAME" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "refusing malformed release tag: $GITHUB_REF_NAME" >&2; exit 1 ;;
+          esac
+          echo "major=${GITHUB_REF_NAME%%.*}" >> "$GITHUB_OUTPUT"
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
@@ -36,9 +43,17 @@ jobs:
 
       # The image must exist before the moving major tag points at a commit
       # whose action.yml references it.
+      # MAJOR goes through env, never `${{ }}` inside the script: a tag named
+      # `v1$(...)` would otherwise be substituted into the shell and run.
       - name: Move major version tag
+        env:
+          MAJOR: ${{ steps.meta.outputs.major }}
         run: |
+          case "$MAJOR" in
+            v[0-9]*) ;;
+            *) echo "refusing unexpected major tag: $MAJOR" >&2; exit 1 ;;
+          esac
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -f "${{ steps.meta.outputs.major }}"
-          git push origin "${{ steps.meta.outputs.major }}" --force
+          git tag -f "$MAJOR"
+          git push origin "$MAJOR" --force

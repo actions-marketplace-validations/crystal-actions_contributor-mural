@@ -28,7 +28,12 @@ module HallOfFame
       end
       parser.parse(argv)
 
-      inputs = Inputs.resolve(config_flag, workspace_flag, commit_flag)
+      begin
+        inputs = Inputs.resolve(config_flag, workspace_flag, commit_flag)
+      rescue ex : ConfigError
+        Annotations.error(ex.message || "invalid action input")
+        return 1
+      end
 
       begin
         config = Config.load(inputs.config_path)

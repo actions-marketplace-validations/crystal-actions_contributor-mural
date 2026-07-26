@@ -6,6 +6,11 @@ module HallOfFame
   class ApiError < Exception
   end
 
+  # Server-side failures worth another attempt; carries the same message the
+  # caller would otherwise see.
+  private class RetryableApiError < ApiError
+  end
+
   # Seam for GitHub-backed user sources so specs can inject a fake.
   abstract class GitHubSource
     abstract def contributors(repo : String) : Array(ResolvedUser)
@@ -78,23 +83,35 @@ module HallOfFame
       loop do
         connection = sponsors_page(login, Math.min(PER_PAGE, options.max), cursor)
         connection["nodes"].as_a.each do |node|
-          next unless entity = node["sponsorEntity"]?
-          next unless sponsor_login = entity["login"]?.try(&.as_s?)
-          monthly = node.dig?("tier", "monthlyPriceInDollars").try(&.as_i?) || 1
-          users << ResolvedUser.new(
-            login: sponsor_login,
-            name: entity["name"]?.try(&.as_s?) || sponsor_login,
-            link: entity["url"]?.try(&.as_s?) || "https://github.com/#{sponsor_login}",
-            avatar_url: entity["avatarUrl"]?.try(&.as_s?),
-            weight: Math.max(monthly, 1),
-            group: options.group,
-          )
+          next unless user = sponsor_from(node, options.group)
+          users << user
           return users if users.size >= options.max
         end
         break unless connection.dig?("pageInfo", "hasNextPage").try(&.as_bool?)
-        cursor = connection.dig?("pageInfo", "endCursor").try(&.as_s?)
+        next_cursor = connection.dig?("pageInfo", "endCursor").try(&.as_s?)
+        # Without a fresh cursor the same page would be requested forever.
+        break if next_cursor.nil? || next_cursor == cursor
+        cursor = next_cursor
       end
       users
+    end
+
+    # A private or deleted sponsor comes back as an explicit null entity.
+    private def sponsor_from(node : JSON::Any, group : String?) : ResolvedUser?
+      entity = node["sponsorEntity"]?.try(&.as_h?)
+      return unless entity
+      sponsor_login = entity["login"]?.try(&.as_s?)
+      return unless sponsor_login
+
+      monthly = node.dig?("tier", "monthlyPriceInDollars").try(&.as_i?) || 1
+      ResolvedUser.new(
+        login: sponsor_login,
+        name: entity["name"]?.try(&.as_s?) || sponsor_login,
+        link: entity["url"]?.try(&.as_s?) || "https://github.com/#{sponsor_login}",
+        avatar_url: entity["avatarUrl"]?.try(&.as_s?),
+        weight: Math.max(monthly, 1),
+        group: group,
+      )
     end
 
     SPONSORS_QUERY = <<-GRAPHQL
@@ -158,7 +175,16 @@ module HallOfFame
       page = 1
       loop do
         url = "#{@api_base}#{path}#{separator}per_page=#{PER_PAGE}&page=#{page}"
-        batch = Array(T).from_json(get_body(url, context))
+        body = get_body(url, context)
+        # A 204 (or a proxy's HTML error page) is not a JSON array; surface
+        # that as an API error rather than a raw parse exception.
+        break if body.strip.empty?
+        batch =
+          begin
+            Array(T).from_json(body)
+          rescue ex : JSON::ParseException
+            raise ApiError.new("#{context}: unexpected response from GitHub (#{ex.message})")
+          end
         batch.each { |item| yield item }
         break if batch.size < PER_PAGE
         page += 1
@@ -175,7 +201,12 @@ module HallOfFame
         check_status(response, "sponsors of #{login}")
         response.body
       end
-      json = JSON.parse(body)
+      json =
+        begin
+          JSON.parse(body)
+        rescue ex : JSON::ParseException
+          raise ApiError.new("sponsors: unexpected response from GitHub (#{ex.message})")
+        end
       if errors = json["errors"]?
         first_message = errors.as_a?.try(&.first?).try(&.["message"]?).try(&.as_s?)
         raise ApiError.new("GitHub GraphQL error: #{first_message || errors.to_json}")
@@ -203,9 +234,13 @@ module HallOfFame
         attempt += 1
         begin
           return yield
+        rescue ex : RetryableApiError
+          raise ApiError.new(ex.message || "GitHub API error") if attempt >= MAX_ATTEMPTS
         rescue ex : ApiError
           raise ex
-        rescue ex : IO::Error
+        rescue ex : Exception
+          # Socket, TLS and other transport failures; only ApiError leaves
+          # this method so callers have one error type to handle.
           raise ApiError.new("network error talking to GitHub (#{context}): #{ex.message}") if attempt >= MAX_ATTEMPTS
         end
         sleep @backoff_base * (2 ** (attempt - 1))
@@ -222,6 +257,10 @@ module HallOfFame
         raise rate_limit_error(response)
       when 404
         raise ApiError.new("#{context}: not found or not accessible (pass a token with access?)")
+      when 500..599
+        # GitHub 5xx is usually transient, and the avatar fetcher already
+        # retries these; keep both clients on the same policy.
+        raise RetryableApiError.new("GitHub API returned #{response.status_code} for #{context}")
       else
         raise ApiError.new("GitHub API returned #{response.status_code} for #{context}")
       end

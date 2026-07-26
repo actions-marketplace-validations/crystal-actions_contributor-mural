@@ -45,13 +45,17 @@ module HallOfFame
     include YAML::Serializable
     include YAML::Serializable::Strict
 
+    DEFAULT_OUTPUT = "HALL_OF_FAME.svg"
+
     property source : Source = Source::List
     property style : Style = Style::Grid
-    property output : String = "HALL_OF_FAME.svg"
+    property output : String = DEFAULT_OUTPUT
     property outputs : Array(OutputEntry)? = nil
     property users : Array(UserEntry) = [] of UserEntry
     property groups : Array(String)? = nil
-    property contributors : ContributorsConfig = ContributorsConfig.new
+    # Nilable so validation can tell "block omitted" from "block present":
+    # a `contributors:` block with `source: list` is a silent no-op otherwise.
+    @contributors : ContributorsConfig? = nil
     property members : MembersConfig? = nil
     property stargazers : StargazersConfig? = nil
     property sponsors : SponsorsConfig? = nil
@@ -69,6 +73,16 @@ module HallOfFame
       from_yaml("{}")
     end
 
+    # Not memoized on purpose: assigning here would make `contributors?`
+    # report a block the user never wrote.
+    def contributors : ContributorsConfig
+      @contributors || ContributorsConfig.new
+    end
+
+    def contributors? : ContributorsConfig?
+      @contributors
+    end
+
     # True when any configured source needs the GitHub API.
     def api_sources? : Bool
       source.uses_contributors? || !members.nil? || !stargazers.nil? || !sponsors.nil?
@@ -79,10 +93,31 @@ module HallOfFame
       begin
         config = from_yaml(File.read(path))
       rescue ex : YAML::ParseException
-        raise ConfigError.new("invalid config: #{ex.message}", ex.line_number)
+        raise ConfigError.new("invalid config: #{friendly_parse_error(ex.message)}", ex.line_number)
       end
       config.validate!
       config
+    end
+
+    # Crystal reports enum failures with its own type names
+    # ("Unknown enum HallOfFame::Style value: \"gird\""). Rewrite those into
+    # the field's vocabulary, listing what is actually accepted.
+    private def self.friendly_parse_error(message : String?) : String
+      return "could not be parsed" unless message
+      match = message.match(/Unknown enum HallOfFame::(\w+) value: (".*?")/)
+      return message unless match
+
+      values =
+        case match[1]
+        when "Source"    then Source.names
+        when "Style"     then Style.names
+        when "Shape"     then Shape.names
+        when "SortMode"  then SortMode.names
+        when "ThemeMode" then ThemeMode.names
+        else                  [] of String
+        end
+      return message if values.empty?
+      "unknown value #{match[2]} (expected one of: #{values.map(&.downcase).join(", ")})"
     end
 
     # The (path, style, mode override) tuples to render: the `outputs` array
@@ -98,8 +133,15 @@ module HallOfFame
     def validate! : Nil
       errors = [] of String
 
-      if source.list? && users.empty?
-        errors << "source 'list' requires a non-empty `users` list"
+      # `source` gates the contributors fetch; members/stargazers/sponsors
+      # switch on by being present. Only complain when nothing at all would
+      # produce a user.
+      if users.empty? && !api_sources?
+        errors << "nothing to render: add `users`, set `source: contributors`, " \
+                  "or configure a `members`/`stargazers`/`sponsors` block"
+      end
+      if source.contributors? && !users.empty?
+        errors << "`source: contributors` ignores the `users` list — use `source: both` to include it"
       end
 
       validate_users(errors)
@@ -132,13 +174,23 @@ module HallOfFame
             errors << "user #{user.login}: local `avatar_url` must be relative to the repository: #{avatar}"
           end
         end
+        # The link lands in an <a href> inside a committed file; keep it to
+        # schemes that cannot execute.
+        if (link = user.link) && !link.matches?(%r{\A(https?://|mailto:|/|\#)}i)
+          errors << "user #{user.login}: `link` must be http(s), mailto, or a repository-relative path: #{link}"
+        end
       end
     end
 
     private def validate_api_sources(errors : Array(String)) : Nil
       errors << "contributors `max` must be >= 1" if contributors.max < 1
+      if contributors? && !source.uses_contributors?
+        errors << "a `contributors` block is set but `source` is '#{source.to_s.downcase}' — " \
+                  "use `source: contributors` or `source: both` to fetch them"
+      end
       if block = members
         errors << "members `org` must not be empty" if block.org.strip.empty?
+        errors << "members `org` must be a plain organization name: #{block.org.inspect}" if block.org.includes?('/')
         errors << "members `max` must be >= 1" if block.max < 1
       end
       if block = stargazers
@@ -173,19 +225,32 @@ module HallOfFame
     end
 
     private def validate_outputs(errors : Array(String)) : Nil
-      render_targets.each do |path, _style, _mode|
-        if path.strip.empty?
-          errors << "output path must not be empty"
-        elsif !path.ends_with?(".svg") && !path.ends_with?(".png")
-          errors << "output path must end with .svg or .png: #{path}"
-        end
-        if path.starts_with?('/') || Path[path].parts.includes?("..")
-          errors << "output path must be relative to the repository: #{path}"
-        end
+      if (entries = outputs) && entries.empty?
+        errors << "`outputs` must not be empty — remove it to use `output` instead"
       end
+      if outputs && output != DEFAULT_OUTPUT
+        errors << "`output` is ignored when `outputs` is set — keep only one of them"
+      end
+
       paths = render_targets.map(&.first)
+      paths.each { |path| validate_output_path(path, errors) }
       errors << "duplicate output paths" if paths.uniq.size != paths.size
       errors << "png `scale` must be positive" if png.scale <= 0
+      errors << "png `scale` must be <= 8" if png.scale > 8
+    end
+
+    private def validate_output_path(path : String, errors : Array(String)) : Nil
+      if path.strip.empty?
+        errors << "output path must not be empty"
+      elsif !path.ends_with?(".svg") && !path.ends_with?(".png")
+        errors << "output path must end with .svg or .png: #{path}"
+      end
+      if path.starts_with?('/') || Path[path].parts.includes?("..")
+        errors << "output path must be relative to the repository: #{path}"
+      end
+      if path.matches?(/[\x00-\x1f]/)
+        errors << "output path must not contain control characters: #{path.inspect}"
+      end
     end
   end
 
@@ -199,10 +264,27 @@ module HallOfFame
     property mode : ThemeMode? = nil
   end
 
+  # Accepts `scale: 2` as well as `scale: 1.5`; YAML's Float64 converter
+  # rejects bare integers, which reads as a bug to anyone writing a round
+  # number.
+  module NumberConverter
+    def self.from_yaml(ctx : YAML::ParseContext, node : YAML::Nodes::Node) : Float64
+      unless node.is_a?(YAML::Nodes::Scalar)
+        node.raise "Expected a number"
+      end
+      node.value.to_f64? || node.raise("Expected a number, not #{node.value.inspect}")
+    end
+
+    def self.to_yaml(value : Float64, yaml : YAML::Nodes::Builder) : Nil
+      value.to_yaml(yaml)
+    end
+  end
+
   class PngConfig
     include YAML::Serializable
     include YAML::Serializable::Strict
 
+    @[YAML::Field(converter: HallOfFame::NumberConverter)]
     property scale : Float64 = 2.0
 
     def initialize
@@ -280,9 +362,9 @@ module HallOfFame
 
     def validate : Array(String)
       errors = [] of String
-      errors << "grid `columns` must be >= 1" if columns < 1
-      errors << "grid `avatar_size` must be >= 8" if avatar_size < 8
-      errors << "grid `margin` must be >= 0" if margin < 0
+      errors << "grid `columns` must be between 1 and 100" unless (1..100).includes?(columns)
+      errors << "grid `avatar_size` must be between 8 and 512" unless (8..512).includes?(avatar_size)
+      errors << "grid `margin` must be between 0 and 200" unless (0..200).includes?(margin)
       errors << "grid `truncate` must be >= 0" if truncate < 0
       errors
     end
@@ -301,9 +383,9 @@ module HallOfFame
 
     def validate : Array(String)
       errors = [] of String
-      errors << "honeycomb `columns` must be >= 1" if columns < 1
-      errors << "honeycomb `cell_size` must be >= 8" if cell_size < 8
-      errors << "honeycomb `gap` must be >= 0" if gap < 0
+      errors << "honeycomb `columns` must be between 1 and 100" unless (1..100).includes?(columns)
+      errors << "honeycomb `cell_size` must be between 8 and 512" unless (8..512).includes?(cell_size)
+      errors << "honeycomb `gap` must be between 0 and 200" unless (0..200).includes?(gap)
       errors
     end
   end
@@ -322,13 +404,14 @@ module HallOfFame
 
     def validate : Array(String)
       errors = [] of String
-      errors << "mosaic `base_cell` must be >= 8" if base_cell < 8
+      errors << "mosaic `base_cell` must be between 8 and 512" unless (8..512).includes?(base_cell)
       errors << "mosaic `width` must be >= `base_cell`" if width < base_cell
-      errors << "mosaic `gap` must be >= 0" if gap < 0
+      errors << "mosaic `width` must be <= 8000" if width > 8000
+      errors << "mosaic `gap` must be between 0 and 200" unless (0..200).includes?(gap)
       if tiers.empty?
         errors << "mosaic `tiers` must not be empty"
-      elsif tiers.any? { |tier| tier < 1 }
-        errors << "mosaic `tiers` values must be >= 1"
+      elsif tiers.any? { |tier| tier < 1 || tier > 12 }
+        errors << "mosaic `tiers` values must be between 1 and 12"
       end
       errors
     end

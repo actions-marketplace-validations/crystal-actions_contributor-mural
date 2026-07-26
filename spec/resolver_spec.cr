@@ -99,6 +99,40 @@ describe HallOfFame::Resolver do
     HallOfFame::Resolver.resolve(config, api).map(&.login).should eq(["worker"])
   end
 
+  it "merges a user appearing in several API sources instead of dropping one" do
+    config = config_from("source: contributors\nsort: none")
+    api = [
+      HallOfFame::ResolvedUser.new("dup", weight: 42, group: "Contributors"),
+      HallOfFame::ResolvedUser.new("Dup", weight: 5, group: "Sponsors", avatar_url: "https://a/x"),
+      HallOfFame::ResolvedUser.new("solo", weight: 1, group: "Sponsors"),
+    ]
+
+    users = HallOfFame::Resolver.resolve(config, api)
+    users.map(&.login).should eq(["dup", "solo"])
+    users[0].weight.should eq(42) # highest standing wins
+    users[0].group.should eq("Contributors")
+    users[0].avatar_url.should eq("https://a/x") # gaps filled from the later entry
+  end
+
+  it "keeps config entries out of API groups unless they ask for one" do
+    config = config_from(<<-YAML)
+      source: both
+      sort: none
+      users:
+        - login: hahwul
+        - login: octocat
+          group: Special
+      YAML
+
+    api = [api_user("hahwul"), api_user("other")]
+    api = api.map { |user| HallOfFame::ResolvedUser.new(user.login, group: "Contributors") }
+    users = HallOfFame::Resolver.resolve(config, api)
+
+    users[0].group.should be_nil
+    users[1].group.should eq("Special")
+    users[2].group.should eq("Contributors")
+  end
+
   it "carries role and group through resolution" do
     config = config_from(<<-YAML)
       sort: none

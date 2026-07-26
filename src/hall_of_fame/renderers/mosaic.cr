@@ -37,7 +37,10 @@ module HallOfFame::Renderers
       spans = users.map { |user| span_for(user.login) }
       cells = pack(spans, columns)
       rows_used = cells.each_with_index.max_of? { |(cell, index)| cell[0] + spans[index] } || 0
-      {(mosaic.gap + columns * unit).to_f, (mosaic.gap + rows_used * unit).to_f}
+      # Shrink to the columns the packer actually filled so a short list does
+      # not render onto a full-width canvas.
+      cols_used = cells.each_with_index.max_of? { |(cell, index)| cell[1] + spans[index] } || 0
+      {(mosaic.gap + cols_used * unit).to_f, (mosaic.gap + rows_used * unit).to_f}
     end
 
     protected def draw_block(io : String::Builder, users : Array(EmbeddedUser), y_offset : Float64) : Nil

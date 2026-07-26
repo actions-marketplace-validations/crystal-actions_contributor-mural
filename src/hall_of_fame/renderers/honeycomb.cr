@@ -28,7 +28,11 @@ module HallOfFame::Renderers
 
       cells = positions(users.size, hc.columns)
       rows_used = cells.empty? ? 0 : cells.last[0] + 1
-      width = gap + hc.columns * (cell_w + gap)
+      # Only as wide as the widest row actually is: a 9-column setting with
+      # two members should not leave seven columns of blank canvas.
+      cols_used = cells.max_of? { |(row, col)| col + 1 + (row.odd? && hc.columns > 1 ? 1 : 0) } || 0
+      cols_used = Math.min(cols_used, hc.columns)
+      width = cols_used.zero? ? gap * 2 : gap + cols_used * (cell_w + gap)
       height = rows_used.zero? ? gap * 2 : gap + (rows_used - 1) * pitch + cell_h + gap
       {width, height}
     end

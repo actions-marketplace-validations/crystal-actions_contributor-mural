@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -44,3 +47,26 @@ jobs:
             hall-of-fame:ci
           grep -q "data:image" /tmp/ws/wall.svg
           head -c 4 /tmp/ws/wall.png | grep -q PNG
+
+  # Exercises the public entry point (action.yml) the way a consumer does;
+  # the docker job above bypasses it by running the image directly.
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prepare a workspace config
+        run: |
+          mkdir -p .github
+          printf 'users:\n  - login: hahwul\n  - login: octocat\noutput: ci-wall.svg\n' \
+            > .github/hall-of-fame.yml
+      - name: Run the action
+        id: hof
+        uses: ./
+        with:
+          no_commit: "true"
+      - name: Check outputs
+        run: |
+          test "${{ steps.hof.outputs.paths }}" = "ci-wall.svg"
+          test "${{ steps.hof.outputs.user_count }}" = "2"
+          test "${{ steps.hof.outputs.changed }}" = "false"
+          grep -q "data:image" ci-wall.svg

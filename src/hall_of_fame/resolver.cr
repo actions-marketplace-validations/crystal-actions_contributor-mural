@@ -3,7 +3,8 @@ module HallOfFame
   # Pure: takes already-fetched contributor data, performs no IO.
   module Resolver
     def self.resolve(config : Config, api_users : Array(ResolvedUser) = [] of ResolvedUser) : Array(ResolvedUser)
-      api_by_login = api_users.index_by(&.login.downcase)
+      merged = merge_api_users(api_users)
+      api_by_login = merged.index_by(&.login.downcase)
       seen = Set(String).new
       result = [] of ResolvedUser
 
@@ -17,7 +18,7 @@ module HallOfFame
 
       # Whatever the runner fetched (contributors, members, stargazers,
       # sponsors) merges in; the `source` enum only gates the fetch itself.
-      api_users.each do |user|
+      merged.each do |user|
         result << user if seen.add?(user.login.downcase)
       end
 
@@ -28,8 +29,37 @@ module HallOfFame
       result
     end
 
+    # Someone can be a contributor *and* a sponsor. Keep one entry per login,
+    # in first-seen order, taking the highest weight and the first group so
+    # neither source silently drops the person or their standing.
+    private def self.merge_api_users(api_users : Array(ResolvedUser)) : Array(ResolvedUser)
+      order = [] of String
+      by_login = {} of String => ResolvedUser
+
+      api_users.each do |user|
+        key = user.login.downcase
+        if existing = by_login[key]?
+          by_login[key] = ResolvedUser.new(
+            login: existing.login,
+            name: existing.name,
+            link: existing.link,
+            avatar_url: existing.avatar_url || user.avatar_url,
+            weight: Math.max(existing.weight, user.weight),
+            role: existing.role || user.role,
+            group: existing.group || user.group,
+          )
+        else
+          order << key
+          by_login[key] = user
+        end
+      end
+      order.map { |key| by_login[key] }
+    end
+
     # Config entries win over API data field by field; API fills the gaps
-    # (e.g. contribution count as weight, canonical avatar URL).
+    # (e.g. contribution count as weight, canonical avatar URL). `group` is
+    # deliberately not inherited: placement is the config's call, and an
+    # entry without `group` belongs to the untitled leading section.
     private def self.from_entry(entry : UserEntry, base : ResolvedUser?) : ResolvedUser
       ResolvedUser.new(
         login: entry.login,
@@ -38,7 +68,7 @@ module HallOfFame
         avatar_url: entry.avatar_url || base.try(&.avatar_url),
         weight: entry.weight || base.try(&.weight) || 1,
         role: entry.role || base.try(&.role),
-        group: entry.group || base.try(&.group),
+        group: entry.group,
       )
     end
 

@@ -11,7 +11,7 @@ module HallOfFame::Renderers
     end
 
     protected def title_inset : Float64
-      @config.grid.margin.to_f
+      @config.grid.margin + gutter_for(nil)
     end
 
     protected def defs(io : String::Builder) : Nil
@@ -31,7 +31,9 @@ module HallOfFame::Renderers
       cell_h = grid.avatar_size + label_height(users)
       width = cols * grid.avatar_size + (cols + 1) * grid.margin
       height = rows * cell_h + (rows + 1) * grid.margin
-      {width.to_f, height.to_f}
+      # Labels are centered on their cell and may be wider than the avatar, so
+      # the block gets a gutter on both sides for the overhang.
+      {width + 2 * gutter_for(users), height.to_f}
     end
 
     protected def draw_block(io : String::Builder, users : Array(EmbeddedUser), y_offset : Float64) : Nil
@@ -40,10 +42,11 @@ module HallOfFame::Renderers
       cell_w = grid.avatar_size
       cell_h = grid.avatar_size + label_height(users)
       clipped = !grid.shape.square?
+      gutter = gutter_for(users)
 
       users.each_with_index do |user, index|
         row, col = index.divmod(cols)
-        x = grid.margin + col * (cell_w + grid.margin)
+        x = gutter + grid.margin + col * (cell_w + grid.margin)
         y = grid.margin + row * (cell_h + grid.margin) + y_offset
 
         io << %(  <a href="#{SVG.escape(user.link)}" target="_blank">\n)
@@ -53,13 +56,39 @@ module HallOfFame::Renderers
         io << "/>\n"
         if grid.show_names?
           center = x + cell_w / 2
-          label(io, truncate(user.name, grid.truncate), center, y + grid.avatar_size + 13)
-          if role = user.role
-            io << %(    <text x="#{SVG.num(center)}" y="#{SVG.num(y + grid.avatar_size + 26)}" text-anchor="middle" font-family="#{SVG.escape(theme.font_family)}" font-size="9" #{role_paint}>#{SVG.escape(truncate(role, grid.truncate + 4))}</text>\n)
+          label(io, name_label(user), center, y + grid.avatar_size + 13)
+          if role = role_label(user)
+            io << %(    <text x="#{SVG.num(center)}" y="#{SVG.num(y + grid.avatar_size + 26)}" text-anchor="middle" font-family="#{SVG.escape(theme.font_family)}" font-size="9" #{role_paint}>#{SVG.escape(role)}</text>\n)
           end
         end
         io << "  </a>\n"
       end
+    end
+
+    private def name_label(user : EmbeddedUser) : String
+      truncate(user.name, @config.grid.truncate)
+    end
+
+    # Roles get a little more room than names; `truncate: 0` disables both.
+    private def role_label(user : EmbeddedUser) : String?
+      role = user.role
+      return unless role
+      limit = @config.grid.truncate
+      truncate(role, limit <= 0 ? 0 : limit + 4)
+    end
+
+    # Half of how far the widest label sticks out past its cell.
+    private def gutter_for(users : Array(EmbeddedUser)?) : Float64
+      grid = @config.grid
+      return 0.0 unless users && grid.show_names?
+
+      widest = users.max_of? do |user|
+        name_width = text_width(name_label(user), 11.0)
+        role_width = (role = role_label(user)) ? text_width(role, 9.0) : 0.0
+        Math.max(name_width, role_width)
+      end
+      return 0.0 unless widest
+      Math.max(widest - grid.avatar_size, 0.0) / 2
     end
 
     # Sections where at least one member has a role get a taller label area.

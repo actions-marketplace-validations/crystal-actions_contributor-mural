@@ -4,6 +4,10 @@ module HallOfFame
   # Fetches avatars in parallel and turns them into base64 data URIs.
   # Results are cached by URL so multiple render targets reuse fetches.
   class Embedder
+    # One avatar to fetch. The URL is resolved once on the main fiber and
+    # carried along, so workers never recompute the cache key.
+    private record Job, user : ResolvedUser, size : Int32, url : String
+
     def initialize(@source : AvatarSource, @concurrency : Int32 = 8)
       @cache = {} of String => String | AvatarError
     end
@@ -13,44 +17,51 @@ module HallOfFame
     # when `fail_on_missing` is set.
     def embed(users : Array(ResolvedUser), renderer : Renderer,
               fail_on_missing : Bool) : {Array(EmbeddedUser), Array(String)}
-      jobs = users.map { |user| {user, renderer.fetch_size(user)} }
-      fetch_missing(jobs.uniq { |user, size| @source.url_for(user, size) })
+      jobs = users.map do |user|
+        size = renderer.fetch_size(user)
+        Job.new(user, size, @source.url_for(user, size))
+      end
+      fetch_missing(jobs.uniq(&.url))
 
       embedded = [] of EmbeddedUser
       skipped = [] of String
-      jobs.each do |user, size|
-        case result = @cache[@source.url_for(user, size)]
+      jobs.each do |job|
+        case result = @cache[job.url]
         in String
-          embedded << EmbeddedUser.new(user, result)
+          embedded << EmbeddedUser.new(job.user, result)
         in AvatarError
-          raise AvatarError.new("#{user.login}: #{result.message}", result.status) if fail_on_missing
-          skipped << user.login
+          raise AvatarError.new("#{job.user.login}: #{result.message}", result.status) if fail_on_missing
+          skipped << job.user.login
         end
       end
       {embedded, skipped}
     end
 
-    private def fetch_missing(jobs : Array({ResolvedUser, Int32})) : Nil
-      pending = jobs.reject { |user, size| @cache.has_key?(@source.url_for(user, size)) }
+    private def fetch_missing(jobs : Array(Job)) : Nil
+      pending = jobs.reject { |job| @cache.has_key?(job.url) }
       return if pending.empty?
 
       channel = Channel({String, String | AvatarError}).new
-      queue = Channel({ResolvedUser, Int32}).new(pending.size)
+      queue = Channel(Job).new(pending.size)
       pending.each { |job| queue.send(job) }
       queue.close
 
       Math.min(@concurrency, pending.size).times do
         spawn do
           while job = queue.receive?
-            user, size = job
-            url = @source.url_for(user, size)
+            # Every failure mode must become a value on the channel: an
+            # exception escaping this fiber kills only the fiber, and the
+            # collector below would then block on `receive` forever.
             result = begin
-              bytes, content_type = @source.fetch(user, size)
+              bytes, content_type = @source.fetch(job.user, job.size)
               "data:#{content_type};base64,#{Base64.strict_encode(bytes)}".as(String | AvatarError)
             rescue ex : AvatarError
               ex.as(String | AvatarError)
+            rescue ex : Exception
+              AvatarError.new("unexpected failure fetching avatar (#{ex.class}): #{ex.message}")
+                .as(String | AvatarError)
             end
-            channel.send({url, result})
+            channel.send({job.url, result})
           end
         end
       end

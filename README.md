@@ -6,6 +6,8 @@ Generate avatar-wall art for your repository — a "hall of fame" of the people 
 | :--: | :-------: | :----: |
 | ![grid](examples/grid.svg) | ![honeycomb](examples/honeycomb.svg) | ![mosaic](examples/mosaic.svg) |
 
+*(Curated samples from [`examples/showcase.yml`](examples/showcase.yml). This repository also runs the action on itself every week — the live result lands in [`docs/`](docs/).)*
+
 - **Three styles** — classic grid (circle/rounded/square), honeycomb hexagons, and a weight-tiered mosaic where your top contributors literally loom larger.
 - **Many sources, one wall** — your curated `users` list, repository contributors, org members, stargazers, and GitHub Sponsors (tier amounts become weights). Mix freely; your YAML entries always win.
 - **Sections & roles** — split the wall into titled groups (say, *Contributors* and *Special Thanks*) and tag people with a role line (*Creator*, *Design*, *Docs*) — made for honoring the folks the contributors API can't see.
@@ -20,7 +22,7 @@ Create `.github/hall-of-fame.yml`:
 ```yaml
 source: both              # my list + repository contributors
 style: grid
-output: HALL_OF_FAME.svg
+output: HALL_OF_FAME.svg  # or drop this and use `outputs:` for several files
 
 users:
   - login: hahwul
@@ -64,12 +66,12 @@ Then embed the result in your README:
 
 | Input | Default | Description |
 | ----- | ------- | ----------- |
-| `config` | `.github/hall-of-fame.yml` | Path to the config YAML |
-| `token` | `${{ github.token }}` | Token for the contributors API (`source: contributors`/`both`) |
-| `no_commit` | `false` | Generate files but skip commit/push |
+| `config` | `.github/hall-of-fame.yml` | Path to the config YAML, relative to the repository root |
+| `token` | `${{ github.token }}` | GitHub API token. Required for `sponsors`; also lifts rate limits and reaches private repos for the other API sources |
+| `no_commit` | `false` | Generate files but skip commit/push (must be `true` or `false`) |
 | `commit_message` | `chore: update hall of fame` | Commit message |
 
-Outputs: `svg_path` (comma-separated generated paths), `user_count`, `changed` (whether a commit was pushed).
+Outputs: `paths` (comma-separated generated files, SVG and PNG), `user_count`, and `changed` (whether a commit was pushed; `false` when `no_commit` is set). `svg_path` still works as an alias for `paths`.
 
 ## Configuration
 
@@ -162,11 +164,16 @@ png:
   scale: 2                  # rasterization zoom for .png outputs
 ```
 
-When `source: both`, your `users` entries win over API data field by field — set a custom `name` or `weight` while the contribution count fills everyone else's. Users without a `group` render first in an untitled section; groups follow the `groups` order (or first mention in the config). This is the recipe for honoring people the API misses — unlinked commit emails, design or docs work: add them to `users` with a `role` and their own section.
+When `source: both`, your `users` entries win over API data field by field — set a custom `name` or `weight` while the contribution count fills everyone else's. Placement is always yours: an entry without `group` renders in the untitled leading section even if the API put that person in one, so add `group:` when you want them filed under a heading. Someone returned by more than one API source (a contributor who also sponsors) appears once, keeping the highest weight and the first source's group.
+
+This is the recipe for honoring people the API misses — unlinked commit emails, design or docs work: add them to `users` with a `role` and their own section.
 
 ## Notes
 
+- A config file is required; the action fails if `.github/hall-of-fame.yml` (or the path you pass as `config`) does not exist.
 - The workflow needs `permissions: contents: write` to push the generated file, and a `concurrency` group avoids racing pushes on busy repositories.
+- Avatars link to profiles and carry name/role tooltips, but a README embed (`![](wall.svg)`) renders as an `<img>`, where neither is active. Open the SVG directly — or inline it — to get links.
+- `members` returns public organization members only; a token with `read:org` is needed for the rest. Stargazers arrive oldest-first with no weight, so under the default `sort: weight` they trail contributors — use `sort: none` to keep the API order.
 - On `pull_request` events the checkout is a detached HEAD, so pushes fail — use push/schedule/dispatch triggers, or set `no_commit: true` and handle the file yourself.
 - SVG size grows with user count (roughly 5–15 KB per avatar). Use `limit` and moderate avatar sizes for large walls.
 - With `mode: auto` (the default) the SVG contains both palettes and a `prefers-color-scheme` media query, so it follows GitHub's light/dark theme. PNGs can't adapt, so `.png` outputs pin `auto` to the light palette — add a second output with `mode: dark` for a pair.
@@ -179,9 +186,11 @@ The action binary is also a local CLI:
 
 ```bash
 shards build --release
-bin/hall-of-fame --config examples/showcase.yml   # writes examples/*.svg
+bin/hall-of-fame --config examples/showcase.yml   # regenerates the committed examples/*.svg
 bin/hall-of-fame -c my.yml --commit               # opt in to commit/push locally
 ```
+
+`--config` is resolved against the current directory, while output paths and local `avatar_url` files are resolved against `--workspace` (the current directory by default; `GITHUB_WORKSPACE` inside the action). Committing happens automatically when `GITHUB_ACTIONS=true` — including on runners that emulate it, such as act or Forgejo — and otherwise only with `--commit`.
 
 ## Development
 
@@ -193,7 +202,9 @@ crystal tool format
 bin/ameba src spec
 ```
 
-Release flow: pushing a `v*` tag builds a multi-arch image to `ghcr.io/crystal-actions/hall-of-fame` and force-moves the major tag (`v0`, `v1`, …). The image is pushed before the git tag moves, so the moving tag always references an existing image.
+Release flow: pushing a `vX.Y.Z` tag builds a multi-arch image to `ghcr.io/crystal-actions/hall-of-fame` and force-moves the major tag (`v0`, `v1`, …). The image is pushed before the git tag moves, so the moving tag always references an existing image.
+
+While the repository is private, `action.yml` still uses `image: Dockerfile`, so consumers build the image on their runner (roughly a minute on a cold cache) and the published GHCR image is not used yet. Switching `action.yml` to `docker://ghcr.io/crystal-actions/hall-of-fame:v0` is part of going public — runners pull GHCR anonymously, which only works once the package is public.
 
 ## License
 
