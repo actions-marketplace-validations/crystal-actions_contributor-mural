@@ -15,10 +15,10 @@ module HallOfFame
         end
       end
 
-      if config.source.uses_contributors?
-        api_users.each do |user|
-          result << user if seen.add?(user.login.downcase)
-        end
+      # Whatever the runner fetched (contributors, members, stargazers,
+      # sponsors) merges in; the `source` enum only gates the fetch itself.
+      api_users.each do |user|
+        result << user if seen.add?(user.login.downcase)
       end
 
       excluded = config.exclude.map(&.downcase).to_set
@@ -66,8 +66,13 @@ module HallOfFame
             order << group unless order.includes?(group)
           end
         end
-        if group = config.contributors.group
-          order << group unless order.includes?(group)
+        {
+          config.contributors.group,
+          config.members.try(&.group),
+          config.stargazers.try(&.group),
+          config.sponsors.try(&.group),
+        }.each do |group|
+          order << group if group && !order.includes?(group)
         end
       end
       order

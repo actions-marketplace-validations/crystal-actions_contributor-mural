@@ -27,8 +27,9 @@ outputs:
   - path: docs/grid.svg
   - path: docs/hex.svg
     style: honeycomb
-  - path: docs/mosaic.svg
+  - path: docs/wall.png
     style: mosaic
+    mode: dark
 
 grid:
   columns: 10

@@ -19,17 +19,33 @@ module HallOfFame
     abstract def fetch(user : ResolvedUser, size : Int32) : {Bytes, String}
   end
 
-  # Fetches avatars over HTTP. `HTTP::Client` does not follow redirects and
+  # Fetches avatars over HTTP, or straight from the workspace when
+  # `avatar_url` is a plain relative path (org logos, folks without a GitHub
+  # account). `HTTP::Client` does not follow redirects and
   # `github.com/<login>.png` answers with a 301, so redirects are handled here.
   class HTTPAvatarSource < AvatarSource
     MAX_REDIRECTS = 5
     MAX_ATTEMPTS  = 3
 
-    def initialize(@backoff_base : Time::Span = 1.second)
+    CONTENT_TYPES = {
+      ".png"  => "image/png",
+      ".jpg"  => "image/jpeg",
+      ".jpeg" => "image/jpeg",
+      ".gif"  => "image/gif",
+      ".webp" => "image/webp",
+      ".svg"  => "image/svg+xml",
+    }
+
+    def initialize(@workspace : String = Dir.current, @backoff_base : Time::Span = 1.second)
+    end
+
+    def self.local_path?(avatar_url : String) : Bool
+      !avatar_url.matches?(%r{\Ahttps?://}i)
     end
 
     def url_for(user : ResolvedUser, size : Int32) : String
       if base = user.avatar_url
+        return "file:#{base}" if self.class.local_path?(base)
         separator = base.includes?('?') ? '&' : '?'
         "#{base}#{separator}s=#{size}"
       else
@@ -38,7 +54,21 @@ module HallOfFame
     end
 
     def fetch(user : ResolvedUser, size : Int32) : {Bytes, String}
-      get_with_retries(url_for(user, size))
+      if (base = user.avatar_url) && self.class.local_path?(base)
+        read_local(base)
+      else
+        get_with_retries(url_for(user, size))
+      end
+    end
+
+    private def read_local(path : String) : {Bytes, String}
+      content_type = CONTENT_TYPES[File.extname(path).downcase]?
+      unless content_type
+        raise AvatarError.new("unsupported local avatar type: #{path} (use #{CONTENT_TYPES.keys.join("/")})")
+      end
+      full = File.join(@workspace, path)
+      raise AvatarError.new("local avatar not found: #{path}", 404) unless File.file?(full)
+      {File.read(full).to_slice, content_type}
     end
 
     private def get_with_retries(url : String) : {Bytes, String}

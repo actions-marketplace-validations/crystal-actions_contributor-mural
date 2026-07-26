@@ -55,7 +55,7 @@ module HallOfFame::Renderers
           center = x + cell_w / 2
           label(io, truncate(user.name, grid.truncate), center, y + grid.avatar_size + 13)
           if role = user.role
-            io << %(    <text x="#{SVG.num(center)}" y="#{SVG.num(y + grid.avatar_size + 26)}" text-anchor="middle" font-family="#{SVG.escape(theme.font_family)}" font-size="9" fill="#{SVG.escape(theme.role_color)}">#{SVG.escape(truncate(role, grid.truncate + 4))}</text>\n)
+            io << %(    <text x="#{SVG.num(center)}" y="#{SVG.num(y + grid.avatar_size + 26)}" text-anchor="middle" font-family="#{SVG.escape(theme.font_family)}" font-size="9" #{role_paint}>#{SVG.escape(truncate(role, grid.truncate + 4))}</text>\n)
           end
         end
         io << "  </a>\n"

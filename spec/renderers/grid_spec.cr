@@ -64,7 +64,8 @@ describe HallOfFame::Renderers::Grid do
     svg = render(config)
     svg.should_not contain("clip-path")
     svg.should_not contain("<text")
-    svg.should contain(%(<rect width="100%" height="100%" fill="#0d1117"/>))
+    svg.should contain(%(.hof-bg{fill:#0d1117}))
+    svg.should contain(%(<rect class="hof-bg" width="100%" height="100%"/>))
     Golden.assert("grid_square.svg", svg)
   end
 
@@ -100,7 +101,8 @@ describe HallOfFame::Renderers::Grid do
     svg = render(config)
     svg.should contain(%(font-size="9"))
     svg.should contain(">Creator</text>")
-    svg.should contain(%(fill="#6e7781"))
+    svg.should contain(%(class="hof-role"))
+    svg.should contain(%(.hof-role{fill:#6e7781}))
     # label area grows 18 -> 32: height = 1 row * (64+32) + 2*8 = 112
     svg.should contain(%(height="112"))
     svg.should contain("<title>HAHWUL (@hahwul) · Creator</title>")

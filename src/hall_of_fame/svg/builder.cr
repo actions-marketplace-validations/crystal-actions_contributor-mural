@@ -18,12 +18,9 @@ module HallOfFame
     end
 
     def self.document(width : Int | Float64, height : Int | Float64,
-                      background : String, & : String::Builder ->) : String
+                      & : String::Builder ->) : String
       String.build do |io|
         io << %(<svg xmlns="http://www.w3.org/2000/svg" width="#{num(width)}" height="#{num(height)}" viewBox="0 0 #{num(width)} #{num(height)}">\n)
-        unless background == "transparent"
-          io << %(  <rect width="100%" height="100%" fill="#{escape(background)}"/>\n)
-        end
         yield io
         io << "</svg>\n"
       end

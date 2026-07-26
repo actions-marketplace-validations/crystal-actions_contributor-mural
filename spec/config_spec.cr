@@ -17,8 +17,12 @@ describe HallOfFame::Config do
       config.grid.shape.should eq(HallOfFame::Shape::Circle)
       config.honeycomb.cell_size.should eq(72)
       config.mosaic.tiers.should eq([3, 2, 1])
-      config.theme.background.should eq("transparent")
-      config.render_targets.should eq([{"HALL_OF_FAME.svg", HallOfFame::Style::Grid}])
+      config.theme.mode.should eq(HallOfFame::ThemeMode::Auto)
+      config.theme.preset.should eq("github")
+      config.theme.light_palette.background.should eq("transparent")
+      config.theme.dark_palette.label_color.should eq("#8b949e")
+      config.png.scale.should eq(2.0)
+      config.render_targets.should eq([{"HALL_OF_FAME.svg", HallOfFame::Style::Grid, nil}])
     end
 
     it "parses every field of a full config" do
@@ -38,9 +42,9 @@ describe HallOfFame::Config do
       config.grid.show_names?.should be_false
       config.mosaic.tiers.should eq([4, 2, 1])
       config.render_targets.should eq([
-        {"docs/grid.svg", HallOfFame::Style::Grid},
-        {"docs/hex.svg", HallOfFame::Style::Honeycomb},
-        {"docs/mosaic.svg", HallOfFame::Style::Mosaic},
+        {"docs/grid.svg", HallOfFame::Style::Grid, nil},
+        {"docs/hex.svg", HallOfFame::Style::Honeycomb, nil},
+        {"docs/wall.png", HallOfFame::Style::Mosaic, HallOfFame::ThemeMode::Dark},
       ])
     end
 
@@ -149,14 +153,14 @@ describe HallOfFame::Config do
       message.should contain("duplicate `groups`")
     end
 
-    it "rejects non-svg output paths" do
+    it "rejects unsupported output extensions" do
       config = HallOfFame::Config.from_yaml(<<-YAML)
-        output: art.png
+        output: art.txt
         users:
           - login: hahwul
         YAML
 
-      expect_raises(HallOfFame::ConfigError, /end with .svg/) { config.validate! }
+      expect_raises(HallOfFame::ConfigError, /end with .svg or .png/) { config.validate! }
     end
   end
 end
@@ -168,5 +172,25 @@ describe HallOfFame::Source do
     HallOfFame::Source::Contributors.uses_contributors?.should be_true
     HallOfFame::Source::Both.uses_list?.should be_true
     HallOfFame::Source::Both.uses_contributors?.should be_true
+  end
+end
+
+describe "local avatar validation" do
+  it "rejects local avatar paths escaping the repository" do
+    config = HallOfFame::Config.from_yaml(<<-YAML)
+      users:
+        - login: a
+          avatar_url: ../secrets.png
+        - login: b
+          avatar_url: /etc/logo.png
+        - login: c
+          avatar_url: assets/ok.png
+      YAML
+
+    error = expect_raises(HallOfFame::ConfigError) { config.validate! }
+    message = error.message || ""
+    message.should contain("user a: local `avatar_url`")
+    message.should contain("user b: local `avatar_url`")
+    message.should_not contain("user c")
   end
 end

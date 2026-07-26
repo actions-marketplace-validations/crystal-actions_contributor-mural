@@ -43,8 +43,8 @@ private def with_api_server(pages : Hash(Int32, String), status : Int32 = 200,
   end
 end
 
-private def options_from(yaml : String) : HallOfFame::ContributorsConfig
-  HallOfFame::Config.from_yaml(yaml).contributors
+private def options_from(yaml : String) : HallOfFame::Config
+  HallOfFame::Config.from_yaml(yaml)
 end
 
 describe HallOfFame::GitHubApi do
@@ -67,7 +67,7 @@ describe HallOfFame::GitHubApi do
         .contributors("o/r").map(&.login).should eq(["human"])
 
       options = options_from("contributors:\n  include_bots: true")
-      HallOfFame::GitHubApi.new(options: options, api_base: base)
+      HallOfFame::GitHubApi.new(config: options, api_base: base)
         .contributors("o/r").map(&.login).should eq(["human", "dependabot[bot]"])
     end
   end
@@ -77,7 +77,7 @@ describe HallOfFame::GitHubApi do
     pages = {1 => "[#{first_page}]", 2 => "[#{contributor_json("last", 1)}]"}
     with_api_server(pages) do |base, seen|
       options = options_from("contributors:\n  max: 500")
-      users = HallOfFame::GitHubApi.new(options: options, api_base: base).contributors("o/r")
+      users = HallOfFame::GitHubApi.new(config: options, api_base: base).contributors("o/r")
       users.size.should eq(101)
       seen.size.should eq(2)
     end
@@ -88,7 +88,7 @@ describe HallOfFame::GitHubApi do
     pages = {1 => "[#{first_page}]", 2 => "[#{contributor_json("ignored", 1)}]"}
     with_api_server(pages) do |base, seen|
       options = options_from("contributors:\n  max: 10")
-      users = HallOfFame::GitHubApi.new(options: options, api_base: base).contributors("o/r")
+      users = HallOfFame::GitHubApi.new(config: options, api_base: base).contributors("o/r")
       users.size.should eq(10)
       seen.size.should eq(1)
     end
@@ -100,7 +100,7 @@ describe HallOfFame::GitHubApi do
       HallOfFame::GitHubApi.new(api_base: base).contributors("o/r").should be_empty
 
       options = options_from("contributors:\n  include_anonymous: true")
-      users = HallOfFame::GitHubApi.new(options: options, api_base: base).contributors("o/r")
+      users = HallOfFame::GitHubApi.new(config: options, api_base: base).contributors("o/r")
       users.size.should eq(1)
       users[0].login.should eq("Ghost Writer")
       users[0].avatar_url.should eq("https://github.com/identicons/Ghost%20Writer.png")
@@ -114,7 +114,7 @@ describe HallOfFame::GitHubApi do
     pages = {1 => "[#{contributor_json("alice", 3)}]"}
     with_api_server(pages) do |base, _seen|
       options = options_from("contributors:\n  group: Contributors")
-      users = HallOfFame::GitHubApi.new(options: options, api_base: base).contributors("o/r")
+      users = HallOfFame::GitHubApi.new(config: options, api_base: base).contributors("o/r")
       users[0].group.should eq("Contributors")
     end
   end
@@ -153,6 +153,124 @@ describe HallOfFame::GitHubApi do
   it "rejects malformed repo values" do
     expect_raises(HallOfFame::ApiError, /owner\/name/) do
       HallOfFame::GitHubApi.new.contributors("not-a-repo")
+    end
+  end
+end
+
+private def config_with(yaml : String) : HallOfFame::Config
+  HallOfFame::Config.from_yaml(yaml)
+end
+
+# Serves REST account lists plus a GraphQL sponsors endpoint.
+private def with_sources_server(sponsor_pages : Array(String) = [] of String, &)
+  seen = [] of String
+  graphql_calls = 0
+  server = HTTP::Server.new do |context|
+    seen << "#{context.request.method} #{context.request.path}"
+    case context.request.path
+    when "/orgs/crystal-actions/members"
+      context.response.content_type = "application/json"
+      context.response.print %([{"login":"member1","avatar_url":"https://a/m1","html_url":"https://github.com/member1"}])
+    when "/repos/o/r/stargazers"
+      context.response.content_type = "application/json"
+      context.response.print %([{"login":"fan1","avatar_url":"https://a/f1"},{"login":"fan2"}])
+    when "/graphql"
+      context.response.content_type = "application/json"
+      body = sponsor_pages[graphql_calls]? || %({"data":{"repositoryOwner":{"sponsorshipsAsMaintainer":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}})
+      graphql_calls += 1
+      context.response.print body
+    else
+      context.response.status_code = 404
+    end
+  end
+  address = server.bind_unused_port "127.0.0.1"
+  spawn { server.listen }
+  begin
+    yield "http://#{address}", seen
+  ensure
+    server.close
+  end
+end
+
+private SPONSOR_PAGE = {
+  data: {
+    repositoryOwner: {
+      sponsorshipsAsMaintainer: {
+        pageInfo: {hasNextPage: false, endCursor: nil},
+        nodes:    [
+          {
+            tier:          {monthlyPriceInDollars: 25},
+            sponsorEntity: {login: "bigfan", name: "Big Fan", avatarUrl: "https://a/bf", url: "https://github.com/bigfan"},
+          },
+          {
+            tier:          nil,
+            sponsorEntity: {login: "smallfan", name: nil, avatarUrl: nil, url: nil},
+          },
+        ],
+      },
+    },
+  },
+}.to_json
+
+describe "HallOfFame::GitHubApi extra sources" do
+  it "fetches organization members with their group" do
+    with_sources_server do |base, _seen|
+      config = config_with("members:\n  org: crystal-actions\n  group: Team")
+      users = HallOfFame::GitHubApi.new(config: config, api_base: base).members("crystal-actions")
+      users.map(&.login).should eq(["member1"])
+      users[0].group.should eq("Team")
+      users[0].weight.should eq(1)
+      users[0].avatar_url.should eq("https://a/m1")
+    end
+  end
+
+  it "fetches stargazers" do
+    with_sources_server do |base, _seen|
+      config = config_with("stargazers:\n  repo: o/r")
+      users = HallOfFame::GitHubApi.new(config: config, api_base: base).stargazers("o/r")
+      users.map(&.login).should eq(["fan1", "fan2"])
+      users[1].link.should eq("https://github.com/fan2")
+    end
+  end
+
+  it "fetches sponsors with tier amounts as weights" do
+    with_sources_server([SPONSOR_PAGE]) do |base, seen|
+      config = config_with("sponsors:\n  login: hahwul\n  group: Sponsors")
+      users = HallOfFame::GitHubApi.new(token: "tok", config: config, api_base: base).sponsors("hahwul")
+      users.map(&.login).should eq(["bigfan", "smallfan"])
+      users[0].weight.should eq(25)
+      users[0].name.should eq("Big Fan")
+      users[0].group.should eq("Sponsors")
+      users[1].weight.should eq(1)
+      users[1].link.should eq("https://github.com/smallfan")
+      seen.count(&.starts_with?("POST /graphql")).should eq(1)
+    end
+  end
+
+  it "requires a token for sponsors" do
+    config = config_with("sponsors:\n  login: hahwul")
+    expect_raises(HallOfFame::ApiError, /requires a `token`/) do
+      HallOfFame::GitHubApi.new(config: config).sponsors("hahwul")
+    end
+  end
+
+  it "surfaces GraphQL errors" do
+    error_page = %({"errors":[{"message":"Something went wrong"}]})
+    with_sources_server([error_page]) do |base, _seen|
+      config = config_with("sponsors:\n  login: hahwul")
+      expect_raises(HallOfFame::ApiError, /Something went wrong/) do
+        HallOfFame::GitHubApi.new(token: "tok", config: config, api_base: base).sponsors("hahwul")
+      end
+    end
+  end
+
+  it "reports unknown sponsor owners" do
+    missing = %({"data":{"repositoryOwner":null}})
+    with_sources_server([missing]) do |base, _seen|
+      config = config_with("sponsors:\n  login: nobody")
+      expect_raises(HallOfFame::ApiError, /no user or organization/) do
+        HallOfFame::GitHubApi.new(token: "tok", config: config, api_base: base).sponsors("nobody")
+      end
     end
   end
 end

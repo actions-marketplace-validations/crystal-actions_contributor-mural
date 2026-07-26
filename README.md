@@ -7,10 +7,11 @@ Generate avatar-wall art for your repository — a "hall of fame" of the people 
 | ![grid](examples/grid.svg) | ![honeycomb](examples/honeycomb.svg) | ![mosaic](examples/mosaic.svg) |
 
 - **Three styles** — classic grid (circle/rounded/square), honeycomb hexagons, and a weight-tiered mosaic where your top contributors literally loom larger.
-- **YAML-first** — curate the list yourself (`users`), pull it from the contributors API (`contributors`), or merge both. Weights, display names, links, roles, and avatar overrides per user.
+- **Many sources, one wall** — your curated `users` list, repository contributors, org members, stargazers, and GitHub Sponsors (tier amounts become weights). Mix freely; your YAML entries always win.
 - **Sections & roles** — split the wall into titled groups (say, *Contributors* and *Special Thanks*) and tag people with a role line (*Creator*, *Design*, *Docs*) — made for honoring the folks the contributors API can't see.
-- **Self-contained SVGs** — avatars are embedded as base64 data URIs, so the image renders anywhere GitHub shows it (READMEs included, where external loads are blocked).
-- **Zero-dependency binary** — pure Crystal stdlib, packaged as a small Alpine container.
+- **Adapts to GitHub dark mode** — by default the SVG carries both palettes and follows the viewer's theme. Pick a `preset` (`github`, `midnight`, `paper`, `mono`) or tune every color for light and dark separately.
+- **SVG and PNG** — self-contained SVGs (avatars embedded as base64, so they render inside READMEs) plus rasterized PNGs for places SVG can't go, including light/dark pairs.
+- **Local avatars** — point `avatar_url` at a file in your repository for logos or people without a GitHub account.
 
 ## Quick start
 
@@ -86,7 +87,8 @@ users:                      # your curated list (source: list/both)
     role: Creator           # optional label under the name (grid) / in tooltips
     group: Contributors     # optional section this user renders in
     link: https://hahwul.com          # optional (default: the GitHub profile)
-    avatar_url: https://…/custom.png  # optional avatar override
+    avatar_url: https://…/custom.png  # optional override; also accepts a
+                                      # repo-relative file (assets/logo.png)
 
 groups: [Contributors, Special Thanks]  # optional: section order (and typo guard)
 
@@ -96,6 +98,21 @@ contributors:               # used when source is contributors/both
   include_anonymous: false  # include anonymous (email-only) contributors
   max: 100                  # cap fetched contributors; contributions become weight
   group: Contributors       # optional section for API-fetched users
+
+members:                    # optional: organization members (presence enables)
+  org: crystal-actions
+  max: 100
+  group: Team
+
+stargazers:                 # optional: the repo's stargazers
+  repo: owner/name          # default: the current repository
+  max: 100
+  group: Stargazers
+
+sponsors:                   # optional: GitHub Sponsors (needs a token; GraphQL)
+  login: hahwul             # default: the repository owner
+  max: 100                  # tier $/month becomes each sponsor's weight
+  group: Sponsors
 
 exclude:                    # drop logins from any source
   - dependabot[bot]
@@ -108,6 +125,8 @@ outputs:                    # optional: render several files in one run
   - path: docs/wall-grid.svg
   - path: docs/wall-hex.svg
     style: honeycomb
+  - path: docs/wall.png     # .png outputs are rasterized (see `png` below)
+    mode: dark              # optional per-output light/dark override
 
 grid:
   columns: 8
@@ -129,11 +148,18 @@ mosaic:
   gap: 2
 
 theme:
-  background: transparent
+  preset: github            # github | midnight | paper | mono
+  mode: auto                # auto (follows the viewer's dark mode) | light | dark
+  background: transparent   # light-palette overrides on top of the preset
   label_color: "#57606a"
   role_color: "#6e7781"     # the role line under names
   title_color: "#24292f"    # section titles
+  dark:                     # dark-palette overrides
+    label_color: "#8b949e"
   font_family: "-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
+
+png:
+  scale: 2                  # rasterization zoom for .png outputs
 ```
 
 When `source: both`, your `users` entries win over API data field by field — set a custom `name` or `weight` while the contribution count fills everyone else's. Users without a `group` render first in an untitled section; groups follow the `groups` order (or first mention in the config). This is the recipe for honoring people the API misses — unlinked commit emails, design or docs work: add them to `users` with a `role` and their own section.
@@ -143,6 +169,9 @@ When `source: both`, your `users` entries win over API data field by field — s
 - The workflow needs `permissions: contents: write` to push the generated file, and a `concurrency` group avoids racing pushes on busy repositories.
 - On `pull_request` events the checkout is a detached HEAD, so pushes fail — use push/schedule/dispatch triggers, or set `no_commit: true` and handle the file yourself.
 - SVG size grows with user count (roughly 5–15 KB per avatar). Use `limit` and moderate avatar sizes for large walls.
+- With `mode: auto` (the default) the SVG contains both palettes and a `prefers-color-scheme` media query, so it follows GitHub's light/dark theme. PNGs can't adapt, so `.png` outputs pin `auto` to the light palette — add a second output with `mode: dark` for a pair.
+- PNG output uses `rsvg-convert`, bundled in the action image. For local runs install librsvg (`brew install librsvg` / `apt install librsvg2-bin` / `apk add rsvg-convert`).
+- `sponsors` always needs a `token` (GraphQL API); the default `github.token` works for public sponsor lists.
 
 ## CLI
 

@@ -37,13 +37,11 @@ module HallOfFame
         return 1
       end
 
-      contributor_source = nil
-      if config.source.uses_contributors?
-        contributor_source = GitHubApi.new(inputs.token, config.contributors)
-      end
+      github_source = config.api_sources? ? GitHubApi.new(inputs.token, config) : nil
       committer = inputs.commit? ? Committer.new(inputs.workspace, inputs.commit_message) : nil
 
-      Runner.new(config, HTTPAvatarSource.new, inputs.workspace, contributor_source, committer).run
+      Runner.new(config, HTTPAvatarSource.new(inputs.workspace), inputs.workspace,
+        github_source, committer, RsvgRasterizer.new).run
     end
   end
 end

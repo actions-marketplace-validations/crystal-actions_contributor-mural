@@ -52,6 +52,9 @@ module HallOfFame
     property users : Array(UserEntry) = [] of UserEntry
     property groups : Array(String)? = nil
     property contributors : ContributorsConfig = ContributorsConfig.new
+    property members : MembersConfig? = nil
+    property stargazers : StargazersConfig? = nil
+    property sponsors : SponsorsConfig? = nil
     property exclude : Array(String) = [] of String
     property sort : SortMode = SortMode::Weight
     property limit : Int32? = nil
@@ -60,6 +63,16 @@ module HallOfFame
     property honeycomb : HoneycombConfig = HoneycombConfig.new
     property mosaic : MosaicConfig = MosaicConfig.new
     property theme : ThemeConfig = ThemeConfig.new
+    property png : PngConfig = PngConfig.new
+
+    def self.empty : Config
+      from_yaml("{}")
+    end
+
+    # True when any configured source needs the GitHub API.
+    def api_sources? : Bool
+      source.uses_contributors? || !members.nil? || !stargazers.nil? || !sponsors.nil?
+    end
 
     def self.load(path : String) : Config
       raise ConfigError.new("config file not found: #{path}") unless File.exists?(path)
@@ -72,13 +85,13 @@ module HallOfFame
       config
     end
 
-    # The (path, style) pairs to render: the `outputs` array when present,
-    # otherwise the single `output`/`style` pair.
-    def render_targets : Array({String, Style})
+    # The (path, style, mode override) tuples to render: the `outputs` array
+    # when present, otherwise the single `output`/`style` pair.
+    def render_targets : Array({String, Style, ThemeMode?})
       if entries = outputs
-        entries.map { |entry| {entry.path, entry.style || style} }
+        entries.map { |entry| {entry.path, entry.style || style, entry.mode} }
       else
-        [{output, style}]
+        [{output, style, nil.as(ThemeMode?)}]
       end
     end
 
@@ -96,11 +109,12 @@ module HallOfFame
       if lim = limit
         errors << "`limit` must be >= 1" if lim < 1
       end
-      errors << "contributors `max` must be >= 1" if contributors.max < 1
+      validate_api_sources(errors)
 
       errors.concat(grid.validate)
       errors.concat(honeycomb.validate)
       errors.concat(mosaic.validate)
+      errors.concat(theme.validate)
 
       raise ConfigError.new(errors.join("; ")) unless errors.empty?
     end
@@ -113,6 +127,25 @@ module HallOfFame
         if weight = user.weight
           errors << "user #{user.login}: `weight` must be >= 1" if weight < 1
         end
+        if (avatar = user.avatar_url) && !avatar.matches?(%r{\Ahttps?://}i)
+          if avatar.starts_with?('/') || Path[avatar].parts.includes?("..")
+            errors << "user #{user.login}: local `avatar_url` must be relative to the repository: #{avatar}"
+          end
+        end
+      end
+    end
+
+    private def validate_api_sources(errors : Array(String)) : Nil
+      errors << "contributors `max` must be >= 1" if contributors.max < 1
+      if block = members
+        errors << "members `org` must not be empty" if block.org.strip.empty?
+        errors << "members `max` must be >= 1" if block.max < 1
+      end
+      if block = stargazers
+        errors << "stargazers `max` must be >= 1" if block.max < 1
+      end
+      if block = sponsors
+        errors << "sponsors `max` must be >= 1" if block.max < 1
       end
     end
 
@@ -127,18 +160,24 @@ module HallOfFame
             errors << "user #{user.login}: group #{group.inspect} is not listed in `groups`" unless known.includes?(group)
           end
         end
-        if group = contributors.group
-          errors << "contributors: group #{group.inspect} is not listed in `groups`" unless known.includes?(group)
+        {
+          "contributors" => contributors.group,
+          "members"      => members.try(&.group),
+          "stargazers"   => stargazers.try(&.group),
+          "sponsors"     => sponsors.try(&.group),
+        }.each do |section, group|
+          next unless group
+          errors << "#{section}: group #{group.inspect} is not listed in `groups`" unless known.includes?(group)
         end
       end
     end
 
     private def validate_outputs(errors : Array(String)) : Nil
-      render_targets.each do |path, _|
+      render_targets.each do |path, _style, _mode|
         if path.strip.empty?
           errors << "output path must not be empty"
-        elsif !path.ends_with?(".svg")
-          errors << "output path must end with .svg: #{path}"
+        elsif !path.ends_with?(".svg") && !path.ends_with?(".png")
+          errors << "output path must end with .svg or .png: #{path}"
         end
         if path.starts_with?('/') || Path[path].parts.includes?("..")
           errors << "output path must be relative to the repository: #{path}"
@@ -146,6 +185,7 @@ module HallOfFame
       end
       paths = render_targets.map(&.first)
       errors << "duplicate output paths" if paths.uniq.size != paths.size
+      errors << "png `scale` must be positive" if png.scale <= 0
     end
   end
 
@@ -155,6 +195,18 @@ module HallOfFame
 
     property path : String
     property style : Style? = nil
+    # Per-output theme mode override, e.g. a light/dark PNG or SVG pair.
+    property mode : ThemeMode? = nil
+  end
+
+  class PngConfig
+    include YAML::Serializable
+    include YAML::Serializable::Strict
+
+    property scale : Float64 = 2.0
+
+    def initialize
+    end
   end
 
   class UserEntry
@@ -182,6 +234,34 @@ module HallOfFame
 
     def initialize
     end
+  end
+
+  # Presence of the block enables the source.
+  class MembersConfig
+    include YAML::Serializable
+    include YAML::Serializable::Strict
+
+    property org : String
+    property max : Int32 = 100
+    property group : String? = nil
+  end
+
+  class StargazersConfig
+    include YAML::Serializable
+    include YAML::Serializable::Strict
+
+    property repo : String? = nil
+    property max : Int32 = 100
+    property group : String? = nil
+  end
+
+  class SponsorsConfig
+    include YAML::Serializable
+    include YAML::Serializable::Strict
+
+    property login : String? = nil
+    property max : Int32 = 100
+    property group : String? = nil
   end
 
   class GridConfig
@@ -254,17 +334,101 @@ module HallOfFame
     end
   end
 
+  enum ThemeMode
+    Auto
+    Light
+    Dark
+  end
+
+  record Palette,
+    background : String,
+    label_color : String,
+    role_color : String,
+    title_color : String
+
+  class PaletteOverride
+    include YAML::Serializable
+    include YAML::Serializable::Strict
+
+    property background : String? = nil
+    property label_color : String? = nil
+    property role_color : String? = nil
+    property title_color : String? = nil
+
+    def initialize
+    end
+  end
+
   class ThemeConfig
     include YAML::Serializable
     include YAML::Serializable::Strict
 
-    property background : String = "transparent"
-    property label_color : String = "#57606a"
-    property role_color : String = "#6e7781"
-    property title_color : String = "#24292f"
+    # {light, dark} palette pairs.
+    PRESETS = {
+      "github" => {
+        Palette.new("transparent", "#57606a", "#6e7781", "#24292f"),
+        Palette.new("transparent", "#8b949e", "#7d8590", "#e6edf3"),
+      },
+      "midnight" => {
+        Palette.new("#0b1021", "#8f9bb3", "#5c6784", "#dfe6f3"),
+        Palette.new("#0b1021", "#8f9bb3", "#5c6784", "#dfe6f3"),
+      },
+      "paper" => {
+        Palette.new("#faf8f2", "#6f6857", "#a39a86", "#3d3629"),
+        Palette.new("#221f1a", "#a89f8d", "#7d7666", "#ece5d8"),
+      },
+      "mono" => {
+        Palette.new("#ffffff", "#444444", "#888888", "#000000"),
+        Palette.new("#000000", "#bbbbbb", "#777777", "#ffffff"),
+      },
+    }
+
+    # Colors land in a <style> block, so restrict them to a safe subset.
+    SAFE_COLOR = /\A[#a-zA-Z0-9(),.%\- ]+\z/
+
+    property preset : String = "github"
+    property mode : ThemeMode = ThemeMode::Auto
+    property background : String? = nil
+    property label_color : String? = nil
+    property role_color : String? = nil
+    property title_color : String? = nil
+    property dark : PaletteOverride = PaletteOverride.new
     property font_family : String = "-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
 
     def initialize
+    end
+
+    def light_palette : Palette
+      base = PRESETS[preset]?.try(&.first) || PRESETS["github"].first
+      Palette.new(
+        background: background || base.background,
+        label_color: label_color || base.label_color,
+        role_color: role_color || base.role_color,
+        title_color: title_color || base.title_color,
+      )
+    end
+
+    def dark_palette : Palette
+      base = PRESETS[preset]?.try(&.last) || PRESETS["github"].last
+      Palette.new(
+        background: dark.background || base.background,
+        label_color: dark.label_color || base.label_color,
+        role_color: dark.role_color || base.role_color,
+        title_color: dark.title_color || base.title_color,
+      )
+    end
+
+    def validate : Array(String)
+      errors = [] of String
+      unless PRESETS.has_key?(preset)
+        errors << "unknown theme `preset`: #{preset} (known: #{PRESETS.keys.join(", ")})"
+      end
+      {light_palette, dark_palette}.each do |palette|
+        {palette.background, palette.label_color, palette.role_color, palette.title_color}.each do |color|
+          errors << "theme color contains unsafe characters: #{color.inspect}" unless color.matches?(SAFE_COLOR)
+        end
+      end
+      errors.uniq
     end
   end
 end

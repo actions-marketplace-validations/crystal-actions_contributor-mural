@@ -13,6 +13,8 @@ jobs:
       - uses: crystal-lang/install-crystal@v1
         with:
           crystal: latest
+      - name: Install rasterizer
+        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends librsvg2-bin
       - name: Install dependencies
         run: shards install
       - name: Check formatting
@@ -36,8 +38,9 @@ jobs:
       - name: Smoke test
         run: |
           mkdir -p /tmp/ws
-          printf 'users:\n  - login: hahwul\n  - login: octocat\n' > /tmp/ws/config.yml
+          printf 'users:\n  - login: hahwul\n  - login: octocat\noutputs:\n  - path: wall.svg\n  - path: wall.png\n' > /tmp/ws/config.yml
           docker run --rm -w /ws -v /tmp/ws:/ws \
             -e INPUT_CONFIG=config.yml -e INPUT_NO_COMMIT=true -e GITHUB_WORKSPACE=/ws \
             hall-of-fame:ci
-          grep -q "data:image" /tmp/ws/HALL_OF_FAME.svg
+          grep -q "data:image" /tmp/ws/wall.svg
+          head -c 4 /tmp/ws/wall.png | grep -q PNG

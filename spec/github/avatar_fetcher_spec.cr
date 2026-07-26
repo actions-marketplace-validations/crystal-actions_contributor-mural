@@ -1,3 +1,4 @@
+require "file_utils"
 require "../spec_helper"
 require "http/server"
 
@@ -61,6 +62,38 @@ describe HallOfFame::HTTPAvatarSource do
       source = HallOfFame::HTTPAvatarSource.new
       user = HallOfFame::ResolvedUser.new("hahwul")
       source.url_for(user, 128).should eq("https://github.com/hahwul.png?size=128")
+    end
+  end
+
+  describe "local avatars" do
+    it "reads workspace-relative files with extension-based content types" do
+      workspace = File.tempname("hof_avatars")
+      Dir.mkdir_p(File.join(workspace, "assets"))
+      File.write(File.join(workspace, "assets/logo.webp"), "WEBPDATA")
+      begin
+        source = HallOfFame::HTTPAvatarSource.new(workspace)
+        user = user_with("assets/logo.webp")
+        source.url_for(user, 64).should eq("file:assets/logo.webp")
+        bytes, content_type = source.fetch(user, 64)
+        String.new(bytes).should eq("WEBPDATA")
+        content_type.should eq("image/webp")
+      ensure
+        FileUtils.rm_rf(workspace)
+      end
+    end
+
+    it "fails like a 404 when the file is missing" do
+      source = HallOfFame::HTTPAvatarSource.new(File.tempname("hof_nowhere"))
+      error = expect_raises(HallOfFame::AvatarError, /not found/) do
+        source.fetch(user_with("assets/gone.png"), 64)
+      end
+      error.status.should eq(404)
+    end
+
+    it "rejects unsupported extensions" do
+      expect_raises(HallOfFame::AvatarError, /unsupported local avatar type/) do
+        HallOfFame::HTTPAvatarSource.new.fetch(user_with("assets/logo.bmp"), 64)
+      end
     end
   end
 

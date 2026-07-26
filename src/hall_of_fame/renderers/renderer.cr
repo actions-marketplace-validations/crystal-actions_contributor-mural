@@ -2,14 +2,19 @@ module HallOfFame
   # Turns embedded users into an SVG document. Styles implement `defs` (shared
   # clip paths, emitted once), `block_size`, and `draw_block` (one section of
   # users at a vertical offset); the base class stacks sections with optional
-  # group titles. PNG output slots in later as another subclass without
-  # touching the pipeline.
+  # group titles and handles theming. In `auto` mode text and background get
+  # CSS classes plus a prefers-color-scheme media query so the SVG follows the
+  # viewer's theme (GitHub included); static modes inline the fills, which
+  # keeps rasterizers happy. PNG output builds on the static path.
   abstract class Renderer
     TITLE_HEIGHT = 30.0
     SECTION_GAP  = 12.0
 
-    def initialize(@config : Config)
+    def initialize(@config : Config, mode : ThemeMode? = nil)
+      @mode = mode || @config.theme.mode
     end
+
+    getter mode : ThemeMode
 
     # Pixel size at which to fetch this user's avatar (2x render size for
     # crisp display on high-DPI screens).
@@ -22,7 +27,9 @@ module HallOfFame
 
     def render(groups : Array({String?, Array(EmbeddedUser)})) : String
       groups = groups.reject { |(_title, users)| users.empty? }
-      return SVG.document(16, 16, theme.background) { } if groups.empty?
+      if groups.empty?
+        return SVG.document(16, 16) { |io| chrome(io) }
+      end
 
       sized = groups.map { |(title, users)| {title, users, block_size(users)} }
       width = sized.max_of { |(_title, _users, size)| size[0] }
@@ -33,13 +40,14 @@ module HallOfFame
         height += size[1]
       end
 
-      SVG.document(width, height, theme.background) do |io|
+      SVG.document(width, height) do |io|
+        chrome(io)
         defs(io)
         y = 0.0
         sized.each_with_index do |(title, users, size), index|
           y += SECTION_GAP if index.positive?
           if title
-            io << %(  <text x="#{SVG.num(title_inset)}" y="#{SVG.num(y + 19)}" text-anchor="start" font-family="#{SVG.escape(theme.font_family)}" font-size="14" font-weight="600" fill="#{SVG.escape(theme.title_color)}">#{SVG.escape(title)}</text>\n)
+            io << %(  <text x="#{SVG.num(title_inset)}" y="#{SVG.num(y + 19)}" text-anchor="start" font-family="#{SVG.escape(theme.font_family)}" font-size="14" font-weight="600" #{title_paint}>#{SVG.escape(title)}</text>\n)
             y += TITLE_HEIGHT
           end
           draw_block(io, users, y)
@@ -53,11 +61,11 @@ module HallOfFame
       render([{nil.as(String?), users}])
     end
 
-    def self.for(style : Style, config : Config) : Renderer
+    def self.for(style : Style, config : Config, mode : ThemeMode? = nil) : Renderer
       case style
-      in .grid?      then Renderers::Grid.new(config)
-      in .honeycomb? then Renderers::Honeycomb.new(config)
-      in .mosaic?    then Renderers::Mosaic.new(config)
+      in .grid?      then Renderers::Grid.new(config, mode)
+      in .honeycomb? then Renderers::Honeycomb.new(config, mode)
+      in .mosaic?    then Renderers::Mosaic.new(config, mode)
       end
     end
 
@@ -80,6 +88,41 @@ module HallOfFame
       @config.theme
     end
 
+    # The static palette for non-auto modes (auto's colors live in CSS).
+    protected def palette : Palette
+      mode.dark? ? theme.dark_palette : theme.light_palette
+    end
+
+    protected def label_paint : String
+      mode.auto? ? %(class="hof-label") : %(fill="#{SVG.escape(palette.label_color)}")
+    end
+
+    protected def role_paint : String
+      mode.auto? ? %(class="hof-role") : %(fill="#{SVG.escape(palette.role_color)}")
+    end
+
+    protected def title_paint : String
+      mode.auto? ? %(class="hof-title") : %(fill="#{SVG.escape(palette.title_color)}")
+    end
+
+    # Theme style block (auto mode) and background rect.
+    private def chrome(io : String::Builder) : Nil
+      light = theme.light_palette
+      dark = theme.dark_palette
+      case mode
+      in .auto?
+        io << %(  <style>.hof-label{fill:#{light.label_color}}.hof-role{fill:#{light.role_color}}.hof-title{fill:#{light.title_color}}.hof-bg{fill:#{light.background}}@media (prefers-color-scheme:dark){.hof-label{fill:#{dark.label_color}}.hof-role{fill:#{dark.role_color}}.hof-title{fill:#{dark.title_color}}.hof-bg{fill:#{dark.background}}}</style>\n)
+        unless light.background == "transparent" && dark.background == "transparent"
+          io << %(  <rect class="hof-bg" width="100%" height="100%"/>\n)
+        end
+      in .light?, .dark?
+        background = palette.background
+        unless background == "transparent"
+          io << %(  <rect width="100%" height="100%" fill="#{SVG.escape(background)}"/>\n)
+        end
+      end
+    end
+
     protected def truncate(name : String, limit : Int32) : String
       return name if limit == 0 || name.size <= limit
       "#{name[0, limit - 1]}…"
@@ -95,7 +138,7 @@ module HallOfFame
     end
 
     protected def label(io : String::Builder, text : String, x : Int32 | Float64, y : Int32 | Float64) : Nil
-      io << %(    <text x="#{SVG.num(x)}" y="#{SVG.num(y)}" text-anchor="middle" font-family="#{SVG.escape(theme.font_family)}" font-size="11" fill="#{SVG.escape(theme.label_color)}">#{SVG.escape(text)}</text>\n)
+      io << %(    <text x="#{SVG.num(x)}" y="#{SVG.num(y)}" text-anchor="middle" font-family="#{SVG.escape(theme.font_family)}" font-size="11" #{label_paint}>#{SVG.escape(text)}</text>\n)
     end
   end
 end

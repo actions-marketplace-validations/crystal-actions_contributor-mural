@@ -6,42 +6,127 @@ module HallOfFame
   class ApiError < Exception
   end
 
-  # Seam for contributor retrieval so specs can inject a fake.
-  abstract class ContributorSource
+  # Seam for GitHub-backed user sources so specs can inject a fake.
+  abstract class GitHubSource
     abstract def contributors(repo : String) : Array(ResolvedUser)
+    abstract def members(org : String) : Array(ResolvedUser)
+    abstract def stargazers(repo : String) : Array(ResolvedUser)
+    abstract def sponsors(login : String) : Array(ResolvedUser)
   end
 
-  # Fetches repository contributors from the GitHub REST API.
-  # Contribution counts become user weights.
-  class GitHubApi < ContributorSource
+  # Fetches users from the GitHub REST and GraphQL APIs. Contribution counts
+  # and sponsor tier amounts become user weights.
+  class GitHubApi < GitHubSource
     PER_PAGE     = 100
     MAX_ATTEMPTS =   3
 
-    def initialize(@token : String? = nil,
-                   @options : ContributorsConfig = ContributorsConfig.new,
+    REPO_PATTERN = %r{\A[^/\s]+/[^/\s]+\z}
+
+    def initialize(@token : String? = nil, @config : Config = Config.empty,
                    @api_base : String = "https://api.github.com",
                    @backoff_base : Time::Span = 1.second)
     end
 
     def contributors(repo : String) : Array(ResolvedUser)
-      unless repo.matches?(%r{\A[^/\s]+/[^/\s]+\z})
-        raise ApiError.new("contributors `repo` must look like owner/name, got: #{repo.inspect}")
-      end
+      options = @config.contributors
+      validate_repo(repo, "contributors")
 
       users = [] of ResolvedUser
-      page = 1
-      loop do
-        batch = fetch_page(repo, page)
-        batch.each do |dto|
-          next unless user = to_user(dto, repo)
-          users << user
-          return users if users.size >= @options.max
-        end
-        break if batch.size < PER_PAGE
-        page += 1
+      each_page("/repos/#{repo}/contributors#{options.include_anonymous? ? "?anon=1" : ""}",
+        "repository #{repo}", ContributorDTO) do |dto|
+        next unless user = contributor_to_user(dto, repo, options)
+        users << user
+        return users if users.size >= options.max
       end
       users
     end
+
+    def members(org : String) : Array(ResolvedUser)
+      options = @config.members
+      return [] of ResolvedUser unless options
+
+      users = [] of ResolvedUser
+      each_page("/orgs/#{org}/members", "organization #{org}", AccountDTO) do |dto|
+        users << account_to_user(dto, options.group)
+        return users if users.size >= options.max
+      end
+      users
+    end
+
+    def stargazers(repo : String) : Array(ResolvedUser)
+      options = @config.stargazers
+      return [] of ResolvedUser unless options
+      validate_repo(repo, "stargazers")
+
+      users = [] of ResolvedUser
+      each_page("/repos/#{repo}/stargazers", "repository #{repo}", AccountDTO) do |dto|
+        users << account_to_user(dto, options.group)
+        return users if users.size >= options.max
+      end
+      users
+    end
+
+    def sponsors(login : String) : Array(ResolvedUser)
+      options = @config.sponsors
+      return [] of ResolvedUser unless options
+      if @token.nil? || @token.try(&.empty?)
+        raise ApiError.new("fetching sponsors requires a `token` (GraphQL API)")
+      end
+
+      users = [] of ResolvedUser
+      cursor = nil.as(String?)
+      loop do
+        connection = sponsors_page(login, Math.min(PER_PAGE, options.max), cursor)
+        connection["nodes"].as_a.each do |node|
+          next unless entity = node["sponsorEntity"]?
+          next unless sponsor_login = entity["login"]?.try(&.as_s?)
+          monthly = node.dig?("tier", "monthlyPriceInDollars").try(&.as_i?) || 1
+          users << ResolvedUser.new(
+            login: sponsor_login,
+            name: entity["name"]?.try(&.as_s?) || sponsor_login,
+            link: entity["url"]?.try(&.as_s?) || "https://github.com/#{sponsor_login}",
+            avatar_url: entity["avatarUrl"]?.try(&.as_s?),
+            weight: Math.max(monthly, 1),
+            group: options.group,
+          )
+          return users if users.size >= options.max
+        end
+        break unless connection.dig?("pageInfo", "hasNextPage").try(&.as_bool?)
+        cursor = connection.dig?("pageInfo", "endCursor").try(&.as_s?)
+      end
+      users
+    end
+
+    SPONSORS_QUERY = <<-GRAPHQL
+      query($login: String!, $first: Int!, $after: String) {
+        repositoryOwner(login: $login) {
+          ... on User {
+            sponsorshipsAsMaintainer(first: $first, after: $after, activeOnly: true) {
+              pageInfo { hasNextPage endCursor }
+              nodes {
+                tier { monthlyPriceInDollars }
+                sponsorEntity {
+                  ... on User { login name avatarUrl url }
+                  ... on Organization { login name avatarUrl url }
+                }
+              }
+            }
+          }
+          ... on Organization {
+            sponsorshipsAsMaintainer(first: $first, after: $after, activeOnly: true) {
+              pageInfo { hasNextPage endCursor }
+              nodes {
+                tier { monthlyPriceInDollars }
+                sponsorEntity {
+                  ... on User { login name avatarUrl url }
+                  ... on Organization { login name avatarUrl url }
+                }
+              }
+            }
+          }
+        }
+      }
+      GRAPHQL
 
     private struct ContributorDTO
       include JSON::Serializable
@@ -55,42 +140,90 @@ module HallOfFame
       getter email : String? = nil
     end
 
-    private def fetch_page(repo : String, page : Int32) : Array(ContributorDTO)
-      params = URI::Params.build do |form|
-        form.add "per_page", PER_PAGE.to_s
-        form.add "page", page.to_s
-        form.add "anon", "1" if @options.include_anonymous?
-      end
-      url = "#{@api_base}/repos/#{repo}/contributors?#{params}"
+    private struct AccountDTO
+      include JSON::Serializable
 
+      getter login : String
+      getter avatar_url : String? = nil
+      getter html_url : String? = nil
+    end
+
+    private def validate_repo(repo : String, section : String) : Nil
+      return if repo.matches?(REPO_PATTERN)
+      raise ApiError.new("#{section} `repo` must look like owner/name, got: #{repo.inspect}")
+    end
+
+    private def each_page(path : String, context : String, dto : T.class, & : T ->) : Nil forall T
+      separator = path.includes?('?') ? '&' : '?'
+      page = 1
+      loop do
+        url = "#{@api_base}#{path}#{separator}per_page=#{PER_PAGE}&page=#{page}"
+        batch = Array(T).from_json(get_body(url, context))
+        batch.each { |item| yield item }
+        break if batch.size < PER_PAGE
+        page += 1
+      end
+    end
+
+    private def sponsors_page(login : String, first : Int32, cursor : String?) : JSON::Any
+      payload = {
+        query:     SPONSORS_QUERY,
+        variables: {login: login, first: first, after: cursor},
+      }.to_json
+      body = with_retries("GraphQL") do
+        response = HTTP::Client.post("#{@api_base}/graphql", headers: headers, body: payload)
+        check_status(response, "sponsors of #{login}")
+        response.body
+      end
+      json = JSON.parse(body)
+      if errors = json["errors"]?
+        first_message = errors.as_a?.try(&.first?).try(&.["message"]?).try(&.as_s?)
+        raise ApiError.new("GitHub GraphQL error: #{first_message || errors.to_json}")
+      end
+      owner = json.dig?("data", "repositoryOwner")
+      if owner.nil? || owner.raw.nil?
+        raise ApiError.new("sponsors: no user or organization named #{login.inspect}")
+      end
+      connection = owner.dig?("sponsorshipsAsMaintainer")
+      raise ApiError.new("sponsors: #{login} does not expose sponsorships") unless connection
+      connection
+    end
+
+    private def get_body(url : String, context : String) : String
+      with_retries(context) do
+        response = HTTP::Client.get(url, headers: headers)
+        check_status(response, context)
+        response.body
+      end
+    end
+
+    private def with_retries(context : String, & : -> String) : String
       attempt = 0
       loop do
         attempt += 1
         begin
-          return handle_response(HTTP::Client.get(url, headers: headers), repo)
+          return yield
         rescue ex : ApiError
           raise ex
         rescue ex : IO::Error
-          raise ApiError.new("network error talking to GitHub: #{ex.message}") if attempt >= MAX_ATTEMPTS
+          raise ApiError.new("network error talking to GitHub (#{context}): #{ex.message}") if attempt >= MAX_ATTEMPTS
         end
         sleep @backoff_base * (2 ** (attempt - 1))
       end
     end
 
-    private def handle_response(response : HTTP::Client::Response, repo : String) : Array(ContributorDTO)
+    private def check_status(response : HTTP::Client::Response, context : String) : Nil
       case response.status_code
-      when 200
-        Array(ContributorDTO).from_json(response.body)
-      when 204
-        [] of ContributorDTO
+      when 200, 204
+        nil
       when 401
         raise ApiError.new("GitHub API rejected the token (401) — check the `token` input")
       when 403, 429
         raise rate_limit_error(response)
       when 404
-        raise ApiError.new("repository not found or not accessible: #{repo} (pass a token with repo access?)")
+        raise ApiError.new("#{context}: not found or not accessible (pass a token with access?)")
       else
-        raise ApiError.new("GitHub API returned #{response.status_code} for #{repo}")
+        raise ApiError.new("GitHub API returned #{response.status_code} for #{context}")
       end
     end
 
@@ -104,27 +237,37 @@ module HallOfFame
       end
     end
 
-    private def to_user(dto : ContributorDTO, repo : String) : ResolvedUser?
+    private def contributor_to_user(dto : ContributorDTO, repo : String,
+                                    options : ContributorsConfig) : ResolvedUser?
       if login = dto.login
-        return if bot?(dto) && !@options.include_bots?
+        return if bot?(dto) && !options.include_bots?
         ResolvedUser.new(
           login: login,
           link: dto.html_url || "https://github.com/#{login}",
           avatar_url: dto.avatar_url,
           weight: Math.max(dto.contributions, 1),
-          group: @options.group,
+          group: options.group,
         )
       else
-        return unless @options.include_anonymous?
+        return unless options.include_anonymous?
         seed = dto.name || dto.email || "anonymous"
         ResolvedUser.new(
           login: seed,
           link: "https://github.com/#{repo}/commits?author=#{URI.encode_www_form(dto.email || seed)}",
           avatar_url: "https://github.com/identicons/#{URI.encode_path_segment(seed)}.png",
           weight: Math.max(dto.contributions, 1),
-          group: @options.group,
+          group: options.group,
         )
       end
+    end
+
+    private def account_to_user(dto : AccountDTO, group : String?) : ResolvedUser
+      ResolvedUser.new(
+        login: dto.login,
+        link: dto.html_url || "https://github.com/#{dto.login}",
+        avatar_url: dto.avatar_url,
+        group: group,
+      )
     end
 
     private def bot?(dto : ContributorDTO) : Bool

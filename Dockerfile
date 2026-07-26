@@ -7,6 +7,6 @@ FROM alpine:3.21
 LABEL org.opencontainers.image.source="https://github.com/crystal-actions/hall-of-fame"
 LABEL org.opencontainers.image.description="Generate avatar-wall SVG art from GitHub users and contributors"
 LABEL org.opencontainers.image.licenses="MIT"
-RUN apk add --no-cache git ca-certificates
+RUN apk add --no-cache git ca-certificates rsvg-convert font-dejavu
 COPY --from=builder /hall-of-fame /usr/local/bin/hall-of-fame
 ENTRYPOINT ["/usr/local/bin/hall-of-fame"]
