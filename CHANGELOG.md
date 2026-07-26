@@ -8,6 +8,8 @@ generated files.
 
 ## [Unreleased]
 
+## [1.1.1]
+
 ### Added
 
 - Source blocks take a `weight`, applied to every user they yield. It replaces
@@ -99,6 +101,7 @@ First public release.
 - Runs a prebuilt multi-arch image from GHCR, so a consumer's runner starts in
   seconds instead of building Crystal on every run.
 
-[Unreleased]: https://github.com/crystal-actions/contributor-mural/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/crystal-actions/contributor-mural/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/crystal-actions/contributor-mural/releases/tag/v1.1.1
 [1.1.0]: https://github.com/crystal-actions/contributor-mural/releases/tag/v1.1.0
 [1.0.0]: https://github.com/crystal-actions/contributor-mural/releases/tag/v1.0.0
