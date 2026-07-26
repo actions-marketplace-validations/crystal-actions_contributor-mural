@@ -8,6 +8,14 @@ generated files.
 
 ## [Unreleased]
 
+## [1.0.2]
+
+### Changed
+
+- Renamed the action to "Avatar Hall of Fame" in `action.yml` — GitHub
+  Marketplace rejected "Hall of Fame" as matching an existing organization
+  name. The repository, image, and `uses:` reference are unchanged.
+
 ## [1.0.1]
 
 ### Changed
@@ -50,6 +58,7 @@ First public release.
 - Several files in one run through `outputs`, sharing one set of avatar
   fetches.
 
-[Unreleased]: https://github.com/crystal-actions/hall-of-fame/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/crystal-actions/hall-of-fame/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/crystal-actions/hall-of-fame/releases/tag/v1.0.2
 [1.0.1]: https://github.com/crystal-actions/hall-of-fame/releases/tag/v1.0.1
 [1.0.0]: https://github.com/crystal-actions/hall-of-fame/releases/tag/v1.0.0
