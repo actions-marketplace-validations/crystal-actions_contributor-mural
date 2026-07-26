@@ -39,4 +39,7 @@ outputs:
 
 runs:
   using: docker
-  image: Dockerfile
+  # Prebuilt so consumers start in seconds instead of building Crystal on
+  # their runner. The release workflow pushes this image before it moves the
+  # matching major tag, so `@v1` never points at an image that is missing.
+  image: docker://ghcr.io/crystal-actions/hall-of-fame:v1

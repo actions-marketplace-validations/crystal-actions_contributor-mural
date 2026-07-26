@@ -54,6 +54,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # action.yml ships a published image so consumers do not build one.
+      # Left as-is, this job would test that image instead of the code under
+      # review, so point it back at the Dockerfile first.
+      - name: Build the action from this checkout
+        run: sed -i 's|image: docker://.*|image: Dockerfile|' action.yml
       - name: Prepare a workspace config
         run: |
           mkdir -p .github

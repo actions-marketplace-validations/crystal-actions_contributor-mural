@@ -224,9 +224,9 @@ crystal tool format
 bin/ameba src spec
 ```
 
-Release flow: pushing a `vX.Y.Z` tag builds a multi-arch image to `ghcr.io/crystal-actions/hall-of-fame` and force-moves the major tag (`v0`, `v1`, …). The image is pushed before the git tag moves, so the moving tag always references an existing image.
+Release flow: pushing a `vX.Y.Z` tag builds a multi-arch image to `ghcr.io/crystal-actions/hall-of-fame` and force-moves the major tag (`v1`, `v2`, …). The image is pushed before the git tag moves, so the moving tag always references an existing image.
 
-While the repository is private, `action.yml` still uses `image: Dockerfile`, so consumers build the image on their runner (roughly a minute on a cold cache) and the published GHCR image is not used yet. Switching `action.yml` to `docker://ghcr.io/crystal-actions/hall-of-fame:v0` is part of going public — runners pull GHCR anonymously, which only works once the package is public.
+`action.yml` points at that published image, which is why consumers start in seconds rather than building Crystal on their runner. The CI job that runs the action rewrites `action.yml` back to `image: Dockerfile` first, so it tests the code under review instead of the last release.
 
 ## License
 
