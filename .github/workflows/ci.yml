@@ -22,6 +22,21 @@ jobs:
         run: shards install
       - name: Check formatting
         run: crystal tool format --check
+      # A malformed workflow fails the run before any job starts, which is
+      # hard to read in the UI; catch it here instead.
+      - name: Check workflow and action YAML
+        run: |
+          crystal eval 'require "yaml"
+            failed = false
+            Dir.glob(".github/workflows/*.yml", ".github/*.yml", "action.yml").each do |file|
+              begin
+                YAML.parse(File.read(file))
+              rescue ex
+                failed = true
+                puts "#{file}: #{ex.message}"
+              end
+            end
+            exit 1 if failed'
       - name: Lint
         run: |
           if [ ! -x bin/ameba ]; then
@@ -58,7 +73,9 @@ jobs:
       # Left as-is, this job would test that image instead of the code under
       # review, so point it back at the Dockerfile first.
       - name: Build the action from this checkout
-        run: sed -i 's|image: docker://.*|image: Dockerfile|' action.yml
+        run: |
+          sed -i 's|image: docker://.*|image: Dockerfile|' action.yml
+          grep -q 'image: Dockerfile' action.yml
       - name: Prepare a workspace config
         run: |
           mkdir -p .github
