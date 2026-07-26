@@ -9,20 +9,6 @@ module HallOfFame
     end
   end
 
-  enum Source
-    List
-    Contributors
-    Both
-
-    def uses_list? : Bool
-      list? || both?
-    end
-
-    def uses_contributors? : Bool
-      contributors? || both?
-    end
-  end
-
   enum Style
     Grid
     Honeycomb
@@ -47,15 +33,14 @@ module HallOfFame
 
     DEFAULT_OUTPUT = "HALL_OF_FAME.svg"
 
-    property source : Source = Source::List
     property style : Style = Style::Grid
     property output : String = DEFAULT_OUTPUT
     property outputs : Array(OutputEntry)? = nil
     property users : Array(UserEntry) = [] of UserEntry
     property groups : Array(String)? = nil
-    # Nilable so validation can tell "block omitted" from "block present":
-    # a `contributors:` block with `source: list` is a silent no-op otherwise.
-    @contributors : ContributorsConfig? = nil
+    # Every source block is enabled by being written down; nil means the key
+    # was left out of the config entirely.
+    property contributors : ContributorsConfig? = nil
     property members : MembersConfig? = nil
     property stargazers : StargazersConfig? = nil
     property sponsors : SponsorsConfig? = nil
@@ -70,33 +55,58 @@ module HallOfFame
     property png : PngConfig = PngConfig.new
 
     def self.empty : Config
-      from_yaml("{}")
-    end
-
-    # Not memoized on purpose: assigning here would make `contributors?`
-    # report a block the user never wrote.
-    def contributors : ContributorsConfig
-      @contributors || ContributorsConfig.new
-    end
-
-    def contributors? : ContributorsConfig?
-      @contributors
+      parse("{}")
     end
 
     # True when any configured source needs the GitHub API.
     def api_sources? : Bool
-      source.uses_contributors? || !members.nil? || !stargazers.nil? || !sponsors.nil?
+      !contributors.nil? || !members.nil? || !stargazers.nil? || !sponsors.nil?
     end
 
     def self.load(path : String) : Config
       raise ConfigError.new("config file not found: #{path}") unless File.exists?(path)
+      config = parse(File.read(path))
+      config.validate!
+      config
+    end
+
+    # Source blocks whose fields are all optional, so writing the key with
+    # nothing under it is a complete configuration.
+    private DEFAULTABLE_BLOCKS = %w[contributors stargazers sponsors]
+
+    def self.parse(yaml : String) : Config
       begin
-        config = from_yaml(File.read(path))
+        config = from_yaml(yaml)
       rescue ex : YAML::ParseException
         raise ConfigError.new("invalid config: #{friendly_parse_error(ex.message)}", ex.line_number)
       end
-      config.validate!
+      config.enable_bare_blocks(yaml)
       config
+    end
+
+    # `contributors:` with nothing under it reads as YAML null, which would
+    # otherwise look like "not configured". Writing the key is the whole
+    # opt-in, so promote those to a default block.
+    protected def enable_bare_blocks(yaml : String) : Nil
+      document =
+        begin
+          YAML.parse(yaml)
+        rescue YAML::ParseException
+          return
+        end
+      mapping = document.as_h?
+      return unless mapping
+
+      mapping.each do |key, value|
+        next unless value.raw.nil?
+        case key.as_s?
+        when "contributors" then self.contributors = ContributorsConfig.new
+        when "stargazers"   then self.stargazers = StargazersConfig.new
+        when "sponsors"     then self.sponsors = SponsorsConfig.new
+        when "members"
+          raise ConfigError.new("`members` needs an `org` — for example:\nmembers:\n  org: your-org")
+        end
+      end
     end
 
     # Crystal reports enum failures with its own type names
@@ -104,12 +114,18 @@ module HallOfFame
     # the field's vocabulary, listing what is actually accepted.
     private def self.friendly_parse_error(message : String?) : String
       return "could not be parsed" unless message
+
+      # `source:` was replaced by writing the source blocks themselves.
+      if message.matches?(/Unknown yaml attribute: source/i)
+        return "`source` was removed — list the sources you want instead, " \
+               "e.g. a `users:` list and/or a `contributors:` block"
+      end
+
       match = message.match(/Unknown enum HallOfFame::(\w+) value: (".*?")/)
       return message unless match
 
       values =
         case match[1]
-        when "Source"    then Source.names
         when "Style"     then Style.names
         when "Shape"     then Shape.names
         when "SortMode"  then SortMode.names
@@ -133,15 +149,9 @@ module HallOfFame
     def validate! : Nil
       errors = [] of String
 
-      # `source` gates the contributors fetch; members/stargazers/sponsors
-      # switch on by being present. Only complain when nothing at all would
-      # produce a user.
       if users.empty? && !api_sources?
-        errors << "nothing to render: add `users`, set `source: contributors`, " \
-                  "or configure a `members`/`stargazers`/`sponsors` block"
-      end
-      if source.contributors? && !users.empty?
-        errors << "`source: contributors` ignores the `users` list — use `source: both` to include it"
+        errors << "nothing to render: add a `users` list, a `contributors:` block, " \
+                  "or one of `members`/`stargazers`/`sponsors`"
       end
 
       validate_users(errors)
@@ -183,10 +193,8 @@ module HallOfFame
     end
 
     private def validate_api_sources(errors : Array(String)) : Nil
-      errors << "contributors `max` must be >= 1" if contributors.max < 1
-      if contributors? && !source.uses_contributors?
-        errors << "a `contributors` block is set but `source` is '#{source.to_s.downcase}' — " \
-                  "use `source: contributors` or `source: both` to fetch them"
+      if block = contributors
+        errors << "contributors `max` must be >= 1" if block.max < 1
       end
       if block = members
         errors << "members `org` must not be empty" if block.org.strip.empty?
@@ -213,7 +221,7 @@ module HallOfFame
           end
         end
         {
-          "contributors" => contributors.group,
+          "contributors" => contributors.try(&.group),
           "members"      => members.try(&.group),
           "stargazers"   => stargazers.try(&.group),
           "sponsors"     => sponsors.try(&.group),
@@ -335,6 +343,9 @@ module HallOfFame
     property repo : String? = nil
     property max : Int32 = 100
     property group : String? = nil
+
+    def initialize
+    end
   end
 
   class SponsorsConfig
@@ -344,6 +355,9 @@ module HallOfFame
     property login : String? = nil
     property max : Int32 = 100
     property group : String? = nil
+
+    def initialize
+    end
   end
 
   class GridConfig

@@ -5,7 +5,6 @@ describe HallOfFame::Config do
     it "applies defaults for a minimal config" do
       config = HallOfFame::Config.load(SpecHelper.fixture("configs", "minimal.yml"))
 
-      config.source.should eq(HallOfFame::Source::List)
       config.style.should eq(HallOfFame::Style::Grid)
       config.output.should eq("HALL_OF_FAME.svg")
       config.sort.should eq(HallOfFame::SortMode::Weight)
@@ -28,10 +27,10 @@ describe HallOfFame::Config do
     it "parses every field of a full config" do
       config = HallOfFame::Config.load(SpecHelper.fixture("configs", "full.yml"))
 
-      config.source.should eq(HallOfFame::Source::Both)
-      config.contributors.repo.should eq("hahwul/hall-of-fame")
-      config.contributors.include_bots?.should be_true
-      config.contributors.max.should eq(50)
+      contributors = config.contributors.should_not be_nil
+      contributors.repo.should eq("hahwul/hall-of-fame")
+      contributors.include_bots?.should be_true
+      contributors.max.should eq(50)
       config.exclude.should eq(["dependabot[bot]"])
       config.limit.should eq(60)
       config.fail_on_missing?.should be_true
@@ -67,30 +66,41 @@ describe HallOfFame::Config do
     end
 
     it "accepts an API-only source without a users list" do
-      config = HallOfFame::Config.from_yaml("stargazers:\n  repo: o/r")
+      config = HallOfFame::Config.parse("stargazers:\n  repo: o/r")
       config.validate!
       config.api_sources?.should be_true
     end
 
-    it "explains that `source: contributors` drops the users list" do
-      config = HallOfFame::Config.from_yaml(<<-YAML)
-        source: contributors
-        users:
-          - login: hahwul
-        YAML
-
-      expect_raises(HallOfFame::ConfigError, /ignores the `users` list/) { config.validate! }
+    it "enables a source block written with no options under it" do
+      config = HallOfFame::Config.parse("contributors:")
+      config.validate!
+      config.contributors.should_not be_nil
+      config.api_sources?.should be_true
     end
 
-    it "flags a contributors block that `source` never fetches" do
-      config = HallOfFame::Config.from_yaml(<<-YAML)
+    it "combines a users list with a contributors block" do
+      config = HallOfFame::Config.parse(<<-YAML)
         users:
           - login: hahwul
         contributors:
           repo: o/r
         YAML
 
-      expect_raises(HallOfFame::ConfigError, /`contributors` block is set but `source`/) { config.validate! }
+      config.validate!
+      config.users.size.should eq(1)
+      config.contributors.try(&.repo).should eq("o/r")
+    end
+
+    it "points at the replacement when the removed `source` key is used" do
+      expect_raises(HallOfFame::ConfigError, /`source` was removed/) do
+        HallOfFame::Config.parse("source: contributors")
+      end
+    end
+
+    it "asks for an org when `members` is written bare" do
+      expect_raises(HallOfFame::ConfigError, /`members` needs an `org`/) do
+        HallOfFame::Config.parse("members:")
+      end
     end
 
     it "names the accepted values for a misspelled enum" do
@@ -124,7 +134,7 @@ describe HallOfFame::Config do
 
   describe "#validate!" do
     it "collects multiple errors into one message" do
-      config = HallOfFame::Config.from_yaml(<<-YAML)
+      config = HallOfFame::Config.parse(<<-YAML)
         users:
           - login: hahwul
             weight: 0
@@ -141,8 +151,7 @@ describe HallOfFame::Config do
     end
 
     it "parses role and group fields" do
-      config = HallOfFame::Config.from_yaml(<<-YAML)
-        source: both
+      config = HallOfFame::Config.parse(<<-YAML)
         groups: [Contributors, Special Thanks]
         users:
           - login: hahwul
@@ -158,12 +167,12 @@ describe HallOfFame::Config do
       config.users[0].role.should eq("Creator")
       config.users[0].group.should eq("Contributors")
       config.users[1].role.should be_nil
-      config.contributors.group.should eq("Contributors")
+      config.contributors.try(&.group).should eq("Contributors")
       config.groups.should eq(["Contributors", "Special Thanks"])
     end
 
     it "rejects group values missing from an explicit groups list" do
-      config = HallOfFame::Config.from_yaml(<<-YAML)
+      config = HallOfFame::Config.parse(<<-YAML)
         groups: [Contributors]
         users:
           - login: hahwul
@@ -179,7 +188,7 @@ describe HallOfFame::Config do
     end
 
     it "rejects duplicate or empty groups entries" do
-      config = HallOfFame::Config.from_yaml(<<-YAML)
+      config = HallOfFame::Config.parse(<<-YAML)
         groups: [A, A, " "]
         users:
           - login: hahwul
@@ -192,7 +201,7 @@ describe HallOfFame::Config do
     end
 
     it "rejects unsupported output extensions" do
-      config = HallOfFame::Config.from_yaml(<<-YAML)
+      config = HallOfFame::Config.parse(<<-YAML)
         output: art.txt
         users:
           - login: hahwul
@@ -203,19 +212,9 @@ describe HallOfFame::Config do
   end
 end
 
-describe HallOfFame::Source do
-  it "knows which sources it uses" do
-    HallOfFame::Source::List.uses_list?.should be_true
-    HallOfFame::Source::List.uses_contributors?.should be_false
-    HallOfFame::Source::Contributors.uses_contributors?.should be_true
-    HallOfFame::Source::Both.uses_list?.should be_true
-    HallOfFame::Source::Both.uses_contributors?.should be_true
-  end
-end
-
 describe "local avatar validation" do
   it "rejects local avatar paths escaping the repository" do
-    config = HallOfFame::Config.from_yaml(<<-YAML)
+    config = HallOfFame::Config.parse(<<-YAML)
       users:
         - login: a
           avatar_url: ../secrets.png

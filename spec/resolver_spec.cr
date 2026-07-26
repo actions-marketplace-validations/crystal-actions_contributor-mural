@@ -1,7 +1,7 @@
 require "./spec_helper"
 
 private def config_from(yaml : String) : HallOfFame::Config
-  HallOfFame::Config.from_yaml(yaml)
+  HallOfFame::Config.parse(yaml)
 end
 
 private def api_user(login : String, weight : Int32 = 1, avatar_url : String? = nil) : HallOfFame::ResolvedUser
@@ -70,7 +70,6 @@ describe HallOfFame::Resolver do
 
   it "merges API data into list entries, config fields winning" do
     config = config_from(<<-YAML)
-      source: both
       sort: none
       users:
         - login: hahwul
@@ -87,20 +86,20 @@ describe HallOfFame::Resolver do
     users[1].weight.should eq(3)
   end
 
-  it "uses only API users for source contributors" do
+  it "keeps both the curated list and API users" do
     config = config_from(<<-YAML)
-      source: contributors
       sort: none
+      contributors: {}
       users:
-        - login: ignored
+        - login: listed
       YAML
 
     api = [api_user("worker")]
-    HallOfFame::Resolver.resolve(config, api).map(&.login).should eq(["worker"])
+    HallOfFame::Resolver.resolve(config, api).map(&.login).should eq(["listed", "worker"])
   end
 
   it "merges a user appearing in several API sources instead of dropping one" do
-    config = config_from("source: contributors\nsort: none")
+    config = config_from("contributors: {}\nsort: none")
     api = [
       HallOfFame::ResolvedUser.new("dup", weight: 42, group: "Contributors"),
       HallOfFame::ResolvedUser.new("Dup", weight: 5, group: "Sponsors", avatar_url: "https://a/x"),
@@ -116,7 +115,6 @@ describe HallOfFame::Resolver do
 
   it "keeps config entries out of API groups unless they ask for one" do
     config = config_from(<<-YAML)
-      source: both
       sort: none
       users:
         - login: hahwul
@@ -154,7 +152,7 @@ end
 
 describe "HallOfFame::Resolver.grouped" do
   it "returns one unnamed section when no groups are used" do
-    config = HallOfFame::Config.from_yaml("users:\n  - login: a")
+    config = HallOfFame::Config.parse("users:\n  - login: a")
     users = [embedded("a"), embedded("b")]
     sections = HallOfFame::Resolver.grouped(users, config)
     sections.size.should eq(1)
@@ -163,7 +161,7 @@ describe "HallOfFame::Resolver.grouped" do
   end
 
   it "orders sections by the explicit groups list, ungrouped first" do
-    config = HallOfFame::Config.from_yaml(<<-YAML)
+    config = HallOfFame::Config.parse(<<-YAML)
       groups: [Core, Thanks]
       users:
         - login: a
@@ -175,7 +173,7 @@ describe "HallOfFame::Resolver.grouped" do
   end
 
   it "falls back to first-appearance order from the config" do
-    config = HallOfFame::Config.from_yaml(<<-YAML)
+    config = HallOfFame::Config.parse(<<-YAML)
       users:
         - login: b1
           group: Beta
@@ -190,7 +188,7 @@ describe "HallOfFame::Resolver.grouped" do
   end
 
   it "drops empty sections" do
-    config = HallOfFame::Config.from_yaml("groups: [Ghost]\nusers:\n  - login: a")
+    config = HallOfFame::Config.parse("groups: [Ghost]\nusers:\n  - login: a")
     sections = HallOfFame::Resolver.grouped([embedded("a")], config)
     sections.map(&.first).should eq([nil])
   end

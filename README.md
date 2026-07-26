@@ -9,7 +9,7 @@ Generate avatar-wall art for your repository — a "hall of fame" of the people 
 *(Curated samples from [`examples/showcase.yml`](examples/showcase.yml). This repository also runs the action on itself every week — the live result lands in [`docs/`](docs/).)*
 
 - **Three styles** — classic grid (circle/rounded/square), honeycomb hexagons, and a weight-tiered mosaic where your top contributors literally loom larger.
-- **Many sources, one wall** — your curated `users` list, repository contributors, org members, stargazers, and GitHub Sponsors (tier amounts become weights). Mix freely; your YAML entries always win.
+- **Many sources, one wall** — your curated `users` list, repository contributors, org members, stargazers, and GitHub Sponsors (tier amounts become weights). Write a source to enable it; everything merges, and your YAML entries always win.
 - **Sections & roles** — split the wall into titled groups (say, *Contributors* and *Special Thanks*) and tag people with a role line (*Creator*, *Design*, *Docs*) — made for honoring the folks the contributors API can't see.
 - **Adapts to GitHub dark mode** — by default the SVG carries both palettes and follows the viewer's theme. Pick a `preset` (`github`, `midnight`, `paper`, `mono`) or tune every color for light and dark separately.
 - **SVG and PNG** — self-contained SVGs (avatars embedded as base64, so they render inside READMEs) plus rasterized PNGs for places SVG can't go, including light/dark pairs.
@@ -20,18 +20,19 @@ Generate avatar-wall art for your repository — a "hall of fame" of the people 
 Create `.github/hall-of-fame.yml`:
 
 ```yaml
-source: both              # my list + repository contributors
-style: grid
-output: HALL_OF_FAME.svg  # or drop this and use `outputs:` for several files
+# List the sources you want — writing one is what turns it on.
+contributors:             # this repository's contributors
 
-users:
+users:                    # plus anyone the API cannot see
   - login: hahwul
     name: HAHWUL
-    weight: 10
+    role: Creator
 
 exclude:
   - dependabot[bot]
 ```
+
+The smallest useful config is one line: `contributors:` on its own.
 
 Add a workflow, e.g. `.github/workflows/hall-of-fame.yml`:
 
@@ -78,11 +79,12 @@ Outputs: `paths` (comma-separated generated files, SVG and PNG), `user_count`, a
 Everything about the art lives in the config YAML:
 
 ```yaml
-source: list                # list | contributors | both (default: list)
 style: grid                 # grid | honeycomb | mosaic (default: grid)
 output: HALL_OF_FAME.svg    # path relative to the repository root
 
-users:                      # your curated list (source: list/both)
+# --- Sources: write a block to enable it; results are merged ---
+
+users:                      # your curated list
   - login: hahwul           # required — GitHub login
     name: HAHWUL            # optional display name (default: login)
     weight: 10              # optional, drives mosaic sizing + weight sort
@@ -94,27 +96,29 @@ users:                      # your curated list (source: list/both)
 
 groups: [Contributors, Special Thanks]  # optional: section order (and typo guard)
 
-contributors:               # used when source is contributors/both
+contributors:               # this repository's contributors (all fields optional)
   repo: owner/name          # default: the current repository
   include_bots: false       # keep type=Bot / *[bot] accounts
   include_anonymous: false  # include anonymous (email-only) contributors
   max: 100                  # cap fetched contributors; contributions become weight
   group: Contributors       # optional section for API-fetched users
 
-members:                    # optional: organization members (presence enables)
+members:                    # organization members (`org` is required)
   org: crystal-actions
   max: 100
   group: Team
 
-stargazers:                 # optional: the repo's stargazers
+stargazers:                 # the repository's stargazers
   repo: owner/name          # default: the current repository
   max: 100
   group: Stargazers
 
-sponsors:                   # optional: GitHub Sponsors (needs a token; GraphQL)
+sponsors:                   # GitHub Sponsors (needs a token)
   login: hahwul             # default: the repository owner
   max: 100                  # tier $/month becomes each sponsor's weight
   group: Sponsors
+
+# --- Everything below is presentation ---
 
 exclude:                    # drop logins from any source
   - dependabot[bot]
@@ -164,7 +168,7 @@ png:
   scale: 2                  # rasterization zoom for .png outputs
 ```
 
-When `source: both`, your `users` entries win over API data field by field — set a custom `name` or `weight` while the contribution count fills everyone else's. Placement is always yours: an entry without `group` renders in the untitled leading section even if the API put that person in one, so add `group:` when you want them filed under a heading. Someone returned by more than one API source (a contributor who also sponsors) appears once, keeping the highest weight and the first source's group.
+When someone appears in both your `users` list and an API source, your entry wins field by field — set a custom `name` or `weight` while the contribution count fills everyone else's. Placement is always yours: an entry without `group` renders in the untitled leading section even if the API put that person in one, so add `group:` when you want them filed under a heading. Someone returned by more than one API source (a contributor who also sponsors) appears once, keeping the highest weight and the first source's group.
 
 This is the recipe for honoring people the API misses — unlinked commit emails, design or docs work: add them to `users` with a `role` and their own section.
 

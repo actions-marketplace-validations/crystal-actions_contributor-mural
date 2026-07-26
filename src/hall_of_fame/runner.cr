@@ -20,7 +20,7 @@ module HallOfFame
         # Writing an empty wall here would replace a good file with a blank
         # one and commit it, so refuse instead.
         raise ConfigError.new("no users to render — every source came back empty " \
-                              "(check `users`, `source`, and `exclude`); existing files were left untouched")
+                              "(check `users`, the source blocks, and `exclude`); existing files were left untouched")
       end
 
       embedder = Embedder.new(@avatar_source)
@@ -46,8 +46,6 @@ module HallOfFame
       end
 
       Annotations.output("paths", written_paths.join(","))
-      # Kept for compatibility with workflows written before PNG support.
-      Annotations.output("svg_path", written_paths.join(","))
       Annotations.output("user_count", user_count.to_s)
 
       changed = false
@@ -112,8 +110,8 @@ module HallOfFame
       end
 
       users = [] of ResolvedUser
-      if @config.source.uses_contributors?
-        users.concat source.contributors(default_repo("contributors", @config.contributors.repo))
+      if block = @config.contributors
+        users.concat source.contributors(default_repo("contributors", block.repo))
       end
       if block = @config.members
         users.concat source.members(block.org)

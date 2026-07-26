@@ -28,7 +28,7 @@ private GOLDEN_USERS = <<-YAML
 
 describe HallOfFame::Renderers::Grid do
   it "renders the circle grid golden file" do
-    config = HallOfFame::Config.from_yaml(<<-YAML)
+    config = HallOfFame::Config.parse(<<-YAML)
       #{GOLDEN_USERS}
       grid:
         columns: 4
@@ -50,7 +50,7 @@ describe HallOfFame::Renderers::Grid do
   end
 
   it "renders the square label-less golden file" do
-    config = HallOfFame::Config.from_yaml(<<-YAML)
+    config = HallOfFame::Config.parse(<<-YAML)
       #{GOLDEN_USERS}
       theme:
         background: "#0d1117"
@@ -71,14 +71,14 @@ describe HallOfFame::Renderers::Grid do
   end
 
   it "links every avatar to the user's page" do
-    config = HallOfFame::Config.from_yaml(GOLDEN_USERS)
+    config = HallOfFame::Config.parse(GOLDEN_USERS)
     svg = render(config)
     svg.scan(/<a href=/).size.should eq(6)
     svg.should contain(%(href="https://github.com/hahwul"))
   end
 
   it "renders an empty document without users" do
-    config = HallOfFame::Config.from_yaml("source: contributors")
+    config = HallOfFame::Config.parse("contributors: {}")
     svg = HallOfFame::Renderer.for(HallOfFame::Style::Grid, config)
       .render([] of HallOfFame::EmbeddedUser)
     svg.should contain("<svg")
@@ -86,7 +86,7 @@ describe HallOfFame::Renderers::Grid do
   end
 
   it "renders role lines and taller cells for sections with roles" do
-    config = HallOfFame::Config.from_yaml(<<-YAML)
+    config = HallOfFame::Config.parse(<<-YAML)
       sort: none
       users:
         - login: hahwul
@@ -111,7 +111,7 @@ describe HallOfFame::Renderers::Grid do
   end
 
   it "renders titled sections for grouped users" do
-    config = HallOfFame::Config.from_yaml(<<-YAML)
+    config = HallOfFame::Config.parse(<<-YAML)
       sort: none
       groups: [Contributors, Special Thanks]
       users:

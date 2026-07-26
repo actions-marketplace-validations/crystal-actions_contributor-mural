@@ -44,7 +44,7 @@ private def with_api_server(pages : Hash(Int32, String), status : Int32 = 200,
 end
 
 private def options_from(yaml : String) : HallOfFame::Config
-  HallOfFame::Config.from_yaml(yaml)
+  HallOfFame::Config.parse(yaml)
 end
 
 describe HallOfFame::GitHubApi do
@@ -158,7 +158,7 @@ describe HallOfFame::GitHubApi do
 end
 
 private def config_with(yaml : String) : HallOfFame::Config
-  HallOfFame::Config.from_yaml(yaml)
+  HallOfFame::Config.parse(yaml)
 end
 
 # Serves REST account lists plus a GraphQL sponsors endpoint.

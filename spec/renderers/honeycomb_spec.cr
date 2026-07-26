@@ -13,7 +13,7 @@ end
 
 describe HallOfFame::Renderers::Honeycomb do
   it "renders the honeycomb golden file" do
-    config = HallOfFame::Config.from_yaml(<<-YAML)
+    config = HallOfFame::Config.parse(<<-YAML)
       style: honeycomb
       sort: none
       users:
@@ -37,7 +37,7 @@ describe HallOfFame::Renderers::Honeycomb do
   end
 
   it "offsets odd rows and reduces their capacity" do
-    config = HallOfFame::Config.from_yaml(<<-YAML)
+    config = HallOfFame::Config.parse(<<-YAML)
       style: honeycomb
       sort: none
       users:
@@ -62,7 +62,7 @@ describe HallOfFame::Renderers::Honeycomb do
   end
 
   it "stacks grouped sections with titles" do
-    config = HallOfFame::Config.from_yaml(<<-YAML)
+    config = HallOfFame::Config.parse(<<-YAML)
       style: honeycomb
       sort: none
       users:
@@ -85,7 +85,7 @@ describe HallOfFame::Renderers::Honeycomb do
   end
 
   it "fetches avatars at twice the cell size" do
-    config = HallOfFame::Config.from_yaml("honeycomb:\n  cell_size: 60\nusers:\n  - login: x")
+    config = HallOfFame::Config.parse("honeycomb:\n  cell_size: 60\nusers:\n  - login: x")
     renderer = HallOfFame::Renderer.for(HallOfFame::Style::Honeycomb, config)
     renderer.fetch_size(HallOfFame::ResolvedUser.new("x")).should eq(120)
   end

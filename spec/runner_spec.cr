@@ -15,7 +15,7 @@ private def run_in_tmp(config_yaml : String, source = FakeAvatarSource.new,
   HallOfFame::Annotations.io = annotations
   ENV["GITHUB_OUTPUT"] = output_file
   begin
-    config = HallOfFame::Config.from_yaml(config_yaml)
+    config = HallOfFame::Config.parse(config_yaml)
     config.validate!
     exit_code = HallOfFame::Runner.new(config, source, workspace, github_source, nil, rasterizer).run
     outputs = File.exists?(output_file) ? File.read(output_file) : ""
@@ -41,7 +41,7 @@ describe HallOfFame::Runner do
       exit_code.should eq(0)
       svg = File.read(File.join(workspace, "art/wall.svg"))
       svg.should contain("data:image/png;base64,")
-      outputs.should contain("svg_path=art/wall.svg")
+      outputs.should contain("paths=art/wall.svg")
       outputs.should contain("user_count=2")
     end
   end
@@ -61,7 +61,7 @@ describe HallOfFame::Runner do
       File.exists?(File.join(workspace, "one.svg")).should be_true
       File.exists?(File.join(workspace, "two.svg")).should be_true
       source.fetch_count.should eq(1)
-      outputs.should contain("svg_path=one.svg,two.svg")
+      outputs.should contain("paths=one.svg,two.svg")
     end
   end
 
@@ -81,7 +81,6 @@ describe HallOfFame::Runner do
 
   it "merges contributors from the API source" do
     yaml = <<-YAML
-      source: both
       contributors:
         repo: hahwul/hall-of-fame
       users:
@@ -126,7 +125,7 @@ describe HallOfFame::Runner do
       dark_svg = rasterizer.calls[1][0]
       dark_svg.should contain(%(fill="#8b949e"))
       File.read(File.join(workspace, "wall.svg")).should contain("<style>")
-      outputs.should contain("svg_path=wall.svg,wall.png,wall-dark.png")
+      outputs.should contain("paths=wall.svg,wall.png,wall-dark.png")
     end
   end
 
@@ -225,7 +224,6 @@ describe HallOfFame::Runner do
 
   it "fails cleanly when contributors are requested without API access" do
     yaml = <<-YAML
-      source: contributors
       contributors:
         repo: hahwul/hall-of-fame
       YAML

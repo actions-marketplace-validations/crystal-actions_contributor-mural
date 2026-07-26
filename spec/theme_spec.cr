@@ -2,11 +2,11 @@ require "./spec_helper"
 require "./support/fake_avatar_source"
 
 private def theme_from(yaml : String) : HallOfFame::ThemeConfig
-  HallOfFame::Config.from_yaml(yaml).theme
+  HallOfFame::Config.parse(yaml).theme
 end
 
 private def render_with(yaml : String) : String
-  config = HallOfFame::Config.from_yaml(yaml)
+  config = HallOfFame::Config.parse(yaml)
   users = HallOfFame::Resolver.resolve(config)
   renderer = HallOfFame::Renderer.for(config.style, config)
   embedded, _ = HallOfFame::Embedder.new(FakeAvatarSource.new)
@@ -37,12 +37,12 @@ describe HallOfFame::ThemeConfig do
   end
 
   it "rejects unknown presets" do
-    config = HallOfFame::Config.from_yaml("theme:\n  preset: vaporwave\nusers:\n  - login: x")
+    config = HallOfFame::Config.parse("theme:\n  preset: vaporwave\nusers:\n  - login: x")
     expect_raises(HallOfFame::ConfigError, /unknown theme `preset`/) { config.validate! }
   end
 
   it "rejects colors that could escape the style block" do
-    config = HallOfFame::Config.from_yaml(<<-YAML)
+    config = HallOfFame::Config.parse(<<-YAML)
       theme:
         label_color: "red}.x{fill:blue"
       users:

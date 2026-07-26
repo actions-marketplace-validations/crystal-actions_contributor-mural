@@ -2,7 +2,7 @@ require "./spec_helper"
 require "./support/fake_avatar_source"
 
 private def grid_renderer(avatar_size : Int32 = 64) : HallOfFame::Renderer
-  config = HallOfFame::Config.from_yaml(<<-YAML)
+  config = HallOfFame::Config.parse(<<-YAML)
     users:
       - login: placeholder
     grid:

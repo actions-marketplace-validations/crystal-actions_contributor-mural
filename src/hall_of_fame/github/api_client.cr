@@ -33,7 +33,7 @@ module HallOfFame
     end
 
     def contributors(repo : String) : Array(ResolvedUser)
-      options = @config.contributors
+      options = @config.contributors || ContributorsConfig.new
       validate_repo(repo, "contributors")
 
       users = [] of ResolvedUser

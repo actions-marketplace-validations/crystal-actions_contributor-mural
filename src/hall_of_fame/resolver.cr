@@ -8,7 +8,7 @@ module HallOfFame
       seen = Set(String).new
       result = [] of ResolvedUser
 
-      if config.source.uses_list?
+      unless config.users.empty?
         config.users.each do |entry|
           key = entry.login.downcase
           result << from_entry(entry, api_by_login[key]?)
@@ -17,7 +17,7 @@ module HallOfFame
       end
 
       # Whatever the runner fetched (contributors, members, stargazers,
-      # sponsors) merges in; the `source` enum only gates the fetch itself.
+      # sponsors) merges in behind the curated list.
       merged.each do |user|
         result << user if seen.add?(user.login.downcase)
       end
@@ -97,7 +97,7 @@ module HallOfFame
           end
         end
         {
-          config.contributors.group,
+          config.contributors.try(&.group),
           config.members.try(&.group),
           config.stargazers.try(&.group),
           config.sponsors.try(&.group),
