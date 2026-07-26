@@ -13,6 +13,8 @@ module HallOfFame
     Grid
     Honeycomb
     Mosaic
+    Spiral
+    Orbit
   end
 
   enum Shape
@@ -51,6 +53,8 @@ module HallOfFame
     property grid : GridConfig = GridConfig.new
     property honeycomb : HoneycombConfig = HoneycombConfig.new
     property mosaic : MosaicConfig = MosaicConfig.new
+    property spiral : SpiralConfig = SpiralConfig.new
+    property orbit : OrbitConfig = OrbitConfig.new
     property theme : ThemeConfig = ThemeConfig.new
     property png : PngConfig = PngConfig.new
 
@@ -166,6 +170,8 @@ module HallOfFame
       errors.concat(grid.validate)
       errors.concat(honeycomb.validate)
       errors.concat(mosaic.validate)
+      errors.concat(spiral.validate)
+      errors.concat(orbit.validate)
       errors.concat(theme.validate)
 
       raise ConfigError.new(errors.join("; ")) unless errors.empty?
@@ -453,6 +459,54 @@ module HallOfFame
     property title_color : String? = nil
 
     def initialize
+    end
+  end
+
+  class SpiralConfig
+    include YAML::Serializable
+    include YAML::Serializable::Strict
+
+    property max_size : Int32 = 72
+    property min_size : Int32 = 32
+    property gap : Int32 = 6
+    property shape : Shape = Shape::Circle
+
+    def initialize
+    end
+
+    def validate : Array(String)
+      errors = [] of String
+      errors << "spiral `max_size` must be between 8 and 512" unless (8..512).includes?(max_size)
+      errors << "spiral `min_size` must be between 8 and 512" unless (8..512).includes?(min_size)
+      errors << "spiral `min_size` must not exceed `max_size`" if min_size > max_size
+      errors << "spiral `gap` must be between 0 and 200" unless (0..200).includes?(gap)
+      errors
+    end
+  end
+
+  class OrbitConfig
+    include YAML::Serializable
+    include YAML::Serializable::Strict
+
+    property center_size : Int32 = 104
+    property avatar_size : Int32 = 56
+    property min_size : Int32 = 36
+    property ring_gap : Int32 = 22
+    property gap : Int32 = 8
+    property? rings : Bool = true
+
+    def initialize
+    end
+
+    def validate : Array(String)
+      errors = [] of String
+      errors << "orbit `center_size` must be between 8 and 512" unless (8..512).includes?(center_size)
+      errors << "orbit `avatar_size` must be between 8 and 512" unless (8..512).includes?(avatar_size)
+      errors << "orbit `min_size` must be between 8 and 512" unless (8..512).includes?(min_size)
+      errors << "orbit `min_size` must not exceed `avatar_size`" if min_size > avatar_size
+      errors << "orbit `ring_gap` must be between 1 and 400" unless (1..400).includes?(ring_gap)
+      errors << "orbit `gap` must be between 0 and 200" unless (0..200).includes?(gap)
+      errors
     end
   end
 

@@ -71,11 +71,18 @@ module HallOfFame
       in .grid?      then Renderers::Grid.new(config, mode)
       in .honeycomb? then Renderers::Honeycomb.new(config, mode)
       in .mosaic?    then Renderers::Mosaic.new(config, mode)
+      in .spiral?    then Renderers::Spiral.new(config, mode)
+      in .orbit?     then Renderers::Orbit.new(config, mode)
       end
     end
 
     # Style-wide <defs>, emitted once per document.
     protected def defs(io : String::Builder) : Nil
+    end
+
+    # Extra CSS a style needs in auto mode, emitted for both palettes.
+    protected def style_rules(palette : Palette) : String
+      ""
     end
 
     # Content size of one section: {width, height}.
@@ -116,7 +123,7 @@ module HallOfFame
       dark = theme.dark_palette
       case mode
       in .auto?
-        io << %(  <style>.hof-label{fill:#{light.label_color}}.hof-role{fill:#{light.role_color}}.hof-title{fill:#{light.title_color}}.hof-bg{fill:#{light.background}}@media (prefers-color-scheme:dark){.hof-label{fill:#{dark.label_color}}.hof-role{fill:#{dark.role_color}}.hof-title{fill:#{dark.title_color}}.hof-bg{fill:#{dark.background}}}</style>\n)
+        io << %(  <style>.hof-label{fill:#{light.label_color}}.hof-role{fill:#{light.role_color}}.hof-title{fill:#{light.title_color}}.hof-bg{fill:#{light.background}}#{style_rules(light)}@media (prefers-color-scheme:dark){.hof-label{fill:#{dark.label_color}}.hof-role{fill:#{dark.role_color}}.hof-title{fill:#{dark.title_color}}.hof-bg{fill:#{dark.background}}#{style_rules(dark)}}</style>\n)
         unless light.background == "transparent" && dark.background == "transparent"
           io << %(  <rect class="hof-bg" width="100%" height="100%"/>\n)
         end

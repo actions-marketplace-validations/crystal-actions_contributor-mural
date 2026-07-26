@@ -6,9 +6,13 @@ Generate avatar-wall art for your repository — a "hall of fame" of the people 
 | :--: | :-------: | :----: |
 | ![grid](examples/grid.svg) | ![honeycomb](examples/honeycomb.svg) | ![mosaic](examples/mosaic.svg) |
 
+| Spiral | Orbit |
+| :----: | :---: |
+| ![spiral](examples/spiral.svg) | ![orbit](examples/orbit.svg) |
+
 *(Curated samples from [`examples/showcase.yml`](examples/showcase.yml). This repository also runs the action on itself every week — the live result lands in [`docs/`](docs/).)*
 
-- **Three styles** — classic grid (circle/rounded/square), honeycomb hexagons, and a weight-tiered mosaic where your top contributors literally loom larger.
+- **Five styles** — a classic grid (circle/rounded/square), honeycomb hexagons, a weight-tiered mosaic, a golden-angle spiral, and an orbit with your lead contributor at its centre.
 - **Many sources, one wall** — your curated `users` list, repository contributors, org members, stargazers, and GitHub Sponsors (tier amounts become weights). Write a source to enable it; everything merges, and your YAML entries always win.
 - **Sections & roles** — split the wall into titled groups (say, *Contributors* and *Special Thanks*) and tag people with a role line (*Creator*, *Design*, *Docs*) — made for honoring the folks the contributors API can't see.
 - **Adapts to GitHub dark mode** — by default the SVG carries both palettes and follows the viewer's theme. Pick a `preset` (`github`, `midnight`, `paper`, `mono`) or tune every color for light and dark separately.
@@ -79,7 +83,7 @@ Outputs: `paths` (comma-separated generated files, SVG and PNG), `user_count`, a
 Everything about the art lives in the config YAML:
 
 ```yaml
-style: grid                 # grid | honeycomb | mosaic (default: grid)
+style: grid                 # grid | honeycomb | mosaic | spiral | orbit
 output: HALL_OF_FAME.svg    # path relative to the repository root
 
 # --- Sources: write a block to enable it; results are merged ---
@@ -152,6 +156,20 @@ mosaic:
   base_cell: 48
   tiers: [3, 2, 1]          # cell spans per weight tier (top tier first)
   gap: 2
+
+spiral:                     # sunflower packing; rank sets size and distance
+  max_size: 72              # the centre avatar
+  min_size: 32              # the outermost ones
+  gap: 6
+  shape: circle             # circle | rounded | square
+
+orbit:                      # one avatar at the centre, the rest in rings
+  center_size: 104
+  avatar_size: 56           # first ring; each ring out is a little smaller
+  min_size: 36
+  ring_gap: 22
+  gap: 8
+  rings: true               # draw the faint orbit lines
 
 theme:
   preset: github            # github | midnight | paper | mono

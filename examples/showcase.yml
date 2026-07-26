@@ -39,6 +39,10 @@ outputs:
     style: honeycomb
   - path: examples/mosaic.svg
     style: mosaic
+  - path: examples/spiral.svg
+    style: spiral
+  - path: examples/orbit.svg
+    style: orbit
 
 grid:
   columns: 6
@@ -56,3 +60,11 @@ mosaic:
   base_cell: 56
   tiers: [3, 2, 1]
   gap: 3
+
+spiral:
+  max_size: 76
+  min_size: 34
+
+orbit:
+  center_size: 96
+  avatar_size: 54
