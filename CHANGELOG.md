@@ -8,6 +8,13 @@ generated files.
 
 ## [Unreleased]
 
+## [1.0.1]
+
+### Changed
+
+- The action now runs the prebuilt image from GHCR instead of building
+  Crystal on the consumer's runner, which took about a minute of every run.
+
 ## [1.0.0]
 
 First public release.
@@ -43,5 +50,6 @@ First public release.
 - Several files in one run through `outputs`, sharing one set of avatar
   fetches.
 
-[Unreleased]: https://github.com/crystal-actions/hall-of-fame/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/crystal-actions/hall-of-fame/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/crystal-actions/hall-of-fame/releases/tag/v1.0.1
 [1.0.0]: https://github.com/crystal-actions/hall-of-fame/releases/tag/v1.0.0
