@@ -9,6 +9,18 @@ module ContributorMural
     end
   end
 
+  # Whether a name may stand as one segment of an API path.
+  #
+  # GitHub logins are letters, digits and hyphens; repository names add dots
+  # and underscores. Anything outside that set either has no business in a name
+  # or changes what the path means once it is pasted into one: `?` turns the
+  # rest of the route into a query string, `#` truncates it, and `..` walks up
+  # out of it — all of which reach a real endpoint and come back as a puzzling
+  # error about GitHub rather than about the config that caused it.
+  def self.path_segment?(value : String) : Bool
+    value.matches?(/\A[A-Za-z0-9._-]+\z/) && value != "." && value != ".."
+  end
+
   enum Style
     Grid
     Honeycomb
@@ -73,7 +85,17 @@ module ContributorMural
 
     def self.load(path : String) : Config
       raise ConfigError.new("config file not found: #{path}") unless File.exists?(path)
-      config = parse(File.read(path))
+      # `exists?` is not `readable?`: the path can be a directory, or a file the
+      # container user cannot open. Both are ordinary mistakes — a `config`
+      # input pointing at the wrong thing — and both reached the top of the
+      # program as an unhandled exception, which in a workflow log means a
+      # Crystal stack trace and no annotation at all.
+      config =
+        begin
+          parse(File.read(path))
+        rescue ex : IO::Error
+          raise ConfigError.new("config file could not be read: #{path} (#{ex.message})")
+        end
       config.validate!
       config
     end
@@ -83,6 +105,7 @@ module ContributorMural
     private DEFAULTABLE_BLOCKS = %w[contributors stargazers sponsors]
 
     def self.parse(yaml : String) : Config
+      reject_discarded_content(yaml)
       begin
         config = from_yaml(yaml)
       rescue ex : YAML::ParseException
@@ -90,6 +113,43 @@ module ContributorMural
       end
       config.enable_bare_blocks(yaml)
       config
+    end
+
+    # Config the parser reads past without complaining about, and which
+    # therefore never reaches the mural.
+    #
+    # Both of these are legal YAML and both are silent — the run succeeds, and
+    # whatever was written below the discarded point simply is not in the
+    # picture. That is the worst way for a config mistake to behave, because
+    # the only symptom is a wall missing people, which reads as a bug in the
+    # sources rather than as something to go and fix in the file.
+    private def self.reject_discarded_content(yaml : String) : Nil
+      documents =
+        begin
+          YAML::Nodes.parse_all(yaml)
+        rescue YAML::ParseException
+          # Malformed input; `from_yaml` reports it with a line number.
+          return
+        end
+
+      if second = documents[1]?
+        raise ConfigError.new(
+          "`---` starts a second YAML document and everything after it is ignored — " \
+          "this file must be one document",
+          second.start_line)
+      end
+
+      mapping = documents.first?.try(&.nodes.first?)
+      return unless mapping.is_a?(YAML::Nodes::Mapping)
+      seen = Set(String).new
+      mapping.each do |key, _value|
+        name = key.as?(YAML::Nodes::Scalar).try(&.value)
+        next if name.nil? || seen.add?(name)
+        raise ConfigError.new(
+          "`#{name}` is set twice — YAML keeps only the last one, so everything " \
+          "written under the first is ignored",
+          key.start_line)
+      end
     end
 
     # `contributors:` with nothing under it reads as YAML null, which would
@@ -221,22 +281,38 @@ module ContributorMural
     private def validate_api_sources(errors : Array(String)) : Nil
       if block = contributors
         errors << "contributors `max` must be >= 1" if block.max < 1
+        validate_repo(errors, "contributors", block.repo)
         validate_source_weight(errors, "contributors", block.weight)
       end
       if block = members
-        errors << "members `org` must not be empty" if block.org.strip.empty?
-        errors << "members `org` must be a plain organization name: #{block.org.inspect}" if block.org.includes?('/')
+        if block.org.strip.empty?
+          errors << "members `org` must not be empty"
+        elsif !ContributorMural.path_segment?(block.org)
+          errors << "members `org` must be a plain organization name: #{block.org.inspect}"
+        end
         errors << "members `max` must be >= 1" if block.max < 1
         validate_source_weight(errors, "members", block.weight)
       end
       if block = stargazers
         errors << "stargazers `max` must be >= 1" if block.max < 1
+        validate_repo(errors, "stargazers", block.repo)
         validate_source_weight(errors, "stargazers", block.weight)
       end
       if block = sponsors
         errors << "sponsors `max` must be >= 1" if block.max < 1
         validate_source_weight(errors, "sponsors", block.weight)
       end
+    end
+
+    # `repo` is optional — left out, it comes from GITHUB_REPOSITORY at run
+    # time and the API client checks it there. Written down, it can be checked
+    # here, where the error names the file and the line.
+    private def validate_repo(errors : Array(String), section : String, repo : String?) : Nil
+      return unless repo
+      owner, slash, name = repo.partition('/')
+      return if !slash.empty? && ContributorMural.path_segment?(owner) &&
+                ContributorMural.path_segment?(name)
+      errors << "#{section} `repo` must look like owner/name: #{repo.inspect}"
     end
 
     private def validate_source_weight(errors : Array(String), section : String, weight : Int32?) : Nil

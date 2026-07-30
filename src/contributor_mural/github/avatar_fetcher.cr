@@ -68,6 +68,9 @@ module ContributorMural
                    @allow_local_redirects : Bool = false, pool : HTTPPool? = nil,
                    allow_local_targets : Bool? = nil)
       @allow_local_targets = allow_local_targets.nil? ? @allow_local_redirects : allow_local_targets
+      # A pool handed in belongs to the caller and outlives this source; one
+      # built here does not, and has to be given back — see `#close`.
+      @owns_pool = pool.nil?
       @pool = pool || HTTPPool.new
       # Answered once per host: a mural of a few thousand faces asks about the
       # same two or three, and the answer involves the resolver.
@@ -75,6 +78,21 @@ module ContributorMural
       # Only the UA: an `Accept` narrower than the wild card would let an
       # avatar host we have never heard of answer 406 where it used to work.
       @headers = HTTP::Headers{"User-Agent" => USER_AGENT}
+    end
+
+    # Hands back the connections this source opened.
+    #
+    # Keep-alive means a source holds a socket open to every host it spoke to
+    # until something says otherwise, and a source that built its own pool had
+    # no way to say it. The connection then sat there until the garbage
+    # collector happened to reach it — invisible to the action, which owns one
+    # pool for the whole run and closes it, and unbounded for anything that
+    # builds a source per repository in a loop.
+    #
+    # A no-op when the pool was handed in: closing someone else's pool hangs up
+    # on whoever else is still using it.
+    def close : Nil
+      @pool.close if @owns_pool
     end
 
     def self.local_path?(avatar_url : String) : Bool
@@ -158,32 +176,53 @@ module ContributorMural
     private def get_following_redirects(url : String) : {Bytes, String}
       refuse_internal_target(url)
       MAX_REDIRECTS.times do
-        response = @pool.get(url, @headers)
-        case response.status_code
-        when 200
-          body = response.body.to_slice
-          if body.size > MAX_BYTES
-            raise AvatarError.new("avatar is too large: #{url} (#{body.size} bytes, limit #{MAX_BYTES})", 200)
+        outcome = @pool.get(url, @headers) do |response|
+          # Read before looking at the status. The body has to come off the
+          # socket whatever it says, or the connection cannot be handed to the
+          # next avatar — and it is only safe to take at all with a limit.
+          body = read_capped(response.body_io, url)
+          case response.status_code
+          when 200
+            {body, image_content_type(response)}
+          when 301, 302, 303, 307, 308
+            response.headers["Location"]? ||
+              raise AvatarError.new("redirect without Location from #{url}")
+          when 404
+            raise AvatarError.new("avatar not found (404)", 404)
+          else
+            raise AvatarError.new("unexpected status #{response.status_code} for #{url}",
+              response.status_code, ContributorMural.retry_after(response, MAX_RETRY_AFTER))
           end
-          return {body, image_content_type(response, url)}
-        when 301, 302, 303, 307, 308
-          location = response.headers["Location"]?
-          raise AvatarError.new("redirect without Location from #{url}") unless location
-          url = safe_redirect(url, location)
-        when 404
-          raise AvatarError.new("avatar not found (404)", 404)
-        else
-          raise AvatarError.new("unexpected status #{response.status_code} for #{url}",
-            response.status_code, ContributorMural.retry_after(response, MAX_RETRY_AFTER))
         end
+        return outcome unless outcome.is_a?(String)
+        url = safe_redirect(url, outcome)
       end
       raise AvatarError.new("too many redirects for #{url}")
+    end
+
+    # Takes at most `MAX_BYTES`, and stops the moment there is more.
+    #
+    # The limit used to be applied to a body already sitting in memory, which
+    # means it only ever rejected the ones small enough to have fit — an
+    # `avatar_url` answering with a gigabyte took the runner down with it
+    # before anything got to look at the size. On a workflow that builds a
+    # mural from a pull request, that address is the contributor's to pick.
+    #
+    # One byte over the limit is enough to know; reading it also leaves the
+    # socket short of its own body, which is why this raises rather than
+    # returns, and why the connection is dropped instead of pooled.
+    private def read_capped(body : IO, url : String) : Bytes
+      buffer = IO::Memory.new
+      if IO.copy(body, buffer, MAX_BYTES + 1) > MAX_BYTES
+        raise AvatarError.new("avatar is too large: #{url} (limit #{MAX_BYTES} bytes)", 200)
+      end
+      buffer.to_slice
     end
 
     # Reads Content-Type from the raw header: `response.content_type` parses
     # the value and raises MIME::Error on malformed input. Unknown types fall
     # back to PNG so a sloppy host cannot inject markup into the data URI.
-    private def image_content_type(response : HTTP::Client::Response, url : String) : String
+    private def image_content_type(response : HTTP::Client::Response) : String
       raw = response.headers["Content-Type"]?.try(&.split(';').first.strip.downcase)
       return "image/png" unless raw
       ALLOWED_CONTENT_TYPES.includes?(raw) ? raw : "image/png"

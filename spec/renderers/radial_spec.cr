@@ -29,11 +29,14 @@ private def ranked_users(count : Int32, scales = {} of Int32 => Float64) : Strin
 end
 
 # Every pair of avatars stays at least as far apart as their two radii, i.e.
-# nothing overlaps. The half-pixel slack is the SVG's two-decimal rounding.
+# nothing overlaps. The slack is the SVG's two-decimal rounding and nothing
+# else: a full half pixel of it used to hide a real overlap in the default
+# spiral, so it is set to what the rounding can actually account for — the two
+# coordinates and the two sizes, at half an ulp of the last decimal each.
 private def assert_no_overlap(placed : Array({Float64, Float64, Float64})) : Nil
   placed.each_combination(2, reuse: true) do |(a, b)|
     distance = Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
-    distance.should be >= (a[2] + b[2]) / 2 - 0.5
+    distance.should be >= (a[2] + b[2]) / 2 - 0.02
   end
 end
 
@@ -41,6 +44,30 @@ private def circles(svg : String) : Array({Float64, Float64, Float64})
   svg.scan(/<image [^>]*x="([-0-9.]+)" y="([-0-9.]+)" width="([0-9.]+)"/).map do |match|
     size = match[3].to_f
     {match[1].to_f + size / 2, match[2].to_f + size / 2, size}
+  end
+end
+
+# `sort` is a whole-config setting, but it is the renderer that decides whether
+# it survives: spiral and orbit each re-sorted the list by weight on their way
+# to placing it, so `sort: login` and `sort: none` — which the reference page
+# documents as keeping list order, and recommends for keeping the API's own —
+# came out weight-ordered anyway. Every style is checked, since the promise is
+# made once and kept in seven places.
+describe "list order across styles" do
+  it "places users in the order `sort` asked for" do
+    # Listed against their weights, so any style that re-ranks shows it.
+    users = "users:\n  - login: zoe\n    weight: 1\n  - login: yan\n    weight: 2\n  - login: xu\n    weight: 3\n"
+    %w[grid honeycomb mosaic voronoi stencil spiral orbit].each do |style|
+      {
+        "none"   => ["zoe", "yan", "xu"],
+        "login"  => ["xu", "yan", "zoe"],
+        "weight" => ["xu", "yan", "zoe"],
+      }.each do |sort, expected|
+        svg = render_radial("style: #{style}\nsort: #{sort}\n#{users}")
+        drawn = svg.scan(%r{<title>([a-z]+)</title>}).map(&.[1])
+        drawn.should eq(expected), "#{style} with sort: #{sort} drew #{drawn}"
+      end
+    end
   end
 end
 
@@ -66,6 +93,23 @@ describe ContributorMural::Renderers::Spiral do
 
   it "keeps avatars from overlapping" do
     assert_no_overlap(circles(render_radial("style: spiral\n#{ranked_users(30)}")))
+  end
+
+  # The area estimate the radii start from is tuned against the default taper.
+  # A flat taper, a wide one, or simply a longer list all walk out of what it
+  # can account for, and each of these overlapped before the radii were checked
+  # against the wall rather than trusted to the estimate.
+  it "keeps avatars from overlapping whatever the sizes are" do
+    {
+      {"max_size: 72\n  min_size: 32", 90},   # the defaults, past where they held
+      {"max_size: 216\n  min_size: 210", 30}, # a taper flat enough to be no taper
+      {"max_size: 282\n  min_size: 226", 30}, # large avatars, shallow taper
+      {"max_size: 100\n  min_size: 20", 40},  # a steep one
+      {"max_size: 40\n  min_size: 8", 40},    # small avatars
+    }.each do |sizes, count|
+      svg = render_radial("style: spiral\nspiral:\n  #{sizes}\n#{ranked_users(count)}")
+      assert_no_overlap(circles(svg))
+    end
   end
 
   it "draws an emphasised contributor larger, without crowding the bloom" do
@@ -149,6 +193,42 @@ describe ContributorMural::Renderers::Orbit do
   it "renders a single user as just the centre" do
     svg = render_radial("style: orbit\n#{ranked_users(1)}")
     circles(svg).size.should eq(1)
+  end
+
+  # A ring used to be filled by arc length, which is longer than the straight
+  # line between two neighbours — badly so when a ring holds only two or three,
+  # where half a circumference of arc is one diameter of chord. Ring-mates
+  # overlapped; a wide `center_size` puts the first ring exactly there.
+  it "keeps ring-mates apart when a ring holds only a few" do
+    {
+      {"center_size: 233\n  avatar_size: 211\n  min_size: 149\n  ring_gap: 19\n  gap: 0", 20},
+      {"center_size: 261\n  avatar_size: 213\n  min_size: 136\n  ring_gap: 4\n  gap: 3", 13},
+      {"center_size: 56\n  avatar_size: 118\n  min_size: 85\n  ring_gap: 30\n  gap: 1", 39},
+    }.each do |orbit, count|
+      assert_no_overlap(circles(render_radial("style: orbit\norbit:\n  #{orbit}\n#{ranked_users(count)}")))
+    end
+  end
+
+  # Stepping out to the next ring reserved half of the ring *after* it, which
+  # the taper makes smaller — three pixels short every ring, so anything with a
+  # `ring_gap` under that had its rings sitting on each other.
+  it "keeps rings apart when the gap between them is small" do
+    {
+      {"center_size: 150\n  avatar_size: 123\n  min_size: 42\n  ring_gap: 2\n  gap: 31", 37},
+      {"center_size: 184\n  avatar_size: 64\n  min_size: 30\n  ring_gap: 2\n  gap: 20", 20},
+      {"center_size: 126\n  avatar_size: 247\n  min_size: 133\n  ring_gap: 1\n  gap: 34", 25},
+    }.each do |orbit, count|
+      assert_no_overlap(circles(render_radial("style: orbit\norbit:\n  #{orbit}\n#{ranked_users(count)}")))
+    end
+  end
+
+  it "honours `gap` as the clearance it is documented to be" do
+    svg = render_radial("style: orbit\norbit:\n  gap: 20\n#{ranked_users(14)}")
+    placed = circles(svg)
+    placed.each_combination(2, reuse: true) do |(a, b)|
+      distance = Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
+      distance.should be >= (a[2] + b[2]) / 2 + 20 - 0.02
+    end
   end
 
   it "draws an emphasised orbiter larger and widens its ring to fit" do

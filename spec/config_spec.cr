@@ -54,6 +54,22 @@ describe ContributorMural::Config do
       end
     end
 
+    # `exists?` is not `readable?`. A `config` input pointing at a directory —
+    # or at a file the container user cannot open — used to reach the top of
+    # the program as an unhandled exception, printing a Crystal stack trace
+    # into the workflow log and no annotation at all.
+    it "fails with a config error when the file cannot be read" do
+      directory = File.tempname("mural_cfg_dir")
+      Dir.mkdir_p(directory)
+      begin
+        expect_raises(ContributorMural::ConfigError, /could not be read/) do
+          ContributorMural::Config.load(directory)
+        end
+      ensure
+        Dir.delete(directory)
+      end
+    end
+
     it "fails on unknown keys (typo protection)" do
       expect_raises(ContributorMural::ConfigError, /avatarsize/) do
         ContributorMural::Config.load(SpecHelper.fixture("configs", "invalid_unknown_key.yml"))
@@ -98,10 +114,53 @@ describe ContributorMural::Config do
       end
     end
 
+    # Both of these are legal YAML that quietly throws half the file away. The
+    # only symptom used to be a wall missing people, which reads as a problem
+    # with the sources rather than with the config.
+    it "refuses a second YAML document instead of ignoring it" do
+      error = expect_raises(ContributorMural::ConfigError, /second YAML document/) do
+        ContributorMural::Config.parse("style: honeycomb\nusers:\n  - login: a\n---\nusers:\n  - login: b\n")
+      end
+      error.line.should eq(4)
+    end
+
+    it "still accepts a single document that opens with the marker" do
+      config = ContributorMural::Config.parse("---\nstyle: mosaic\nusers:\n  - login: a\n")
+      config.style.should eq(ContributorMural::Style::Mosaic)
+      config.users.map(&.login).should eq(["a"])
+    end
+
+    it "refuses a key set twice instead of keeping only the last" do
+      error = expect_raises(ContributorMural::ConfigError, /`users` is set twice/) do
+        ContributorMural::Config.parse("style: grid\nusers:\n  - login: a\nusers:\n  - login: b\n")
+      end
+      error.line.should eq(4)
+    end
+
     it "asks for an org when `members` is written bare" do
       expect_raises(ContributorMural::ConfigError, /`members` needs an `org`/) do
         ContributorMural::Config.parse("members:")
       end
+    end
+
+    # Caught here rather than at the first request, so the error names the file
+    # and the line instead of arriving as a puzzling report about GitHub.
+    it "rejects a source name that is not a plain GitHub name" do
+      {
+        "members:\n  org: my-org?x=1"        => /members `org` must be a plain organization name/,
+        "members:\n  org: my org"            => /members `org` must be a plain organization name/,
+        "contributors:\n  repo: owner/repo?" => /contributors `repo` must look like owner\/name/,
+        "contributors:\n  repo: owner"       => /contributors `repo` must look like owner\/name/,
+        "stargazers:\n  repo: owner/.."      => /stargazers `repo` must look like owner\/name/,
+      }.each do |yaml, message|
+        expect_raises(ContributorMural::ConfigError, message) do
+          ContributorMural::Config.parse(yaml).validate!
+        end
+      end
+    end
+
+    it "accepts the punctuation GitHub allows in a repository name" do
+      ContributorMural::Config.parse("contributors:\n  repo: my-org/some.repo_name").validate!
     end
 
     it "names the accepted values for a misspelled enum" do
