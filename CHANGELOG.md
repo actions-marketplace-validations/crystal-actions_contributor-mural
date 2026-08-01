@@ -5,83 +5,52 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — f
 an action, the "public API" is the config schema, the action inputs and outputs,
 and the generated files.
 
-## Unreleased
+## v1.2.0
 
 ### Added
 
-- Three new styles. `constellation` draws a night sky: rank sets each star's
-  size and glow, near neighbours join up into constellations, and two depths
-  of dust fill the dark between them. `skyline` draws a city: weight sets
-  each building's height, the avatar sits up top like a rooftop billboard,
-  and each building draws one of six roof silhouettes, a wall width, and a
-  glazing for its lit windows from a deterministic lottery. `metro` draws a
-  transit map: stations on a coloured route that snakes across the wall, one
-  line per section — or one per role with `role_lines`, and `weave` makes
-  those lines interleave and cross one another like a real network — with
-  the heavier terminus rings at both ends. `constellation` and `skyline`
-  honour per-user `scale` (skyline in height); `metro` is a fixed lattice
+- Three new styles. `constellation` draws a night sky, where rank sets each
+  star's size and glow and near neighbours join up. `skyline` draws a city,
+  where weight sets each building's height and the avatar sits on top like a
+  rooftop billboard. `metro` draws a transit map, one coloured line per section
+  — or per role with `role_lines`, and `weave` to interleave them. The first
+  two honour per-user `scale` (skyline in height); `metro` is a fixed lattice
   and ignores it.
 
 ### Fixed
 
-- The `svg_path` output is emitted again. It is declared in `action.yml` and
-  documented as the alias kept for workflows written before `outputs` existed,
-  but nothing ever wrote it — those workflows have been reading the empty
-  string. It carries the same value as `paths`.
-- A user returned by more than one API source keeps a real display name instead
-  of a login. The contributors API reports no name, so the login stood in for
-  one, and first-wins then shadowed the name a `sponsors` entry did carry.
-- Two outputs naming the same file through different spellings (`./wall.svg`
-  and `wall.svg`) are rejected as duplicates. The run used to render both, leave
-  only the second on disk, and still report two paths for it.
-- The config reference in the README is a config the parser accepts. Its
-  `groups` list named two sections while the source blocks below it asked for
-  three others, so `groups` did the job it exists to do and rejected the page
-  outright — anyone pasting "every key on one page" got three errors and no
-  mural. The specs now parse and validate every config the README shows, render
-  every committed example config, and check that a run emits exactly the
-  outputs `action.yml` declares.
+- The `svg_path` output is emitted again. It is declared in `action.yml`, but
+  nothing ever wrote it, so workflows predating `outputs` read an empty string.
 - An `avatar_url` pointing at the runner's own network is refused instead of
-  fetched. Redirects were already held to that rule, but the first request was
-  never checked, so an address written straight into the config — a cloud
-  metadata endpoint, a service on the host — was fetched, labelled `image/png`
-  whatever came back, and base64-embedded into a file the run then commits. On a
-  workflow that builds a mural from a pull request, that address is the
-  contributor's to choose. The check now also judges a host by the addresses it
-  resolves to rather than by how it is spelled, which is what a name pointed at
-  an internal address, or the decimal form of one, used to walk past — and
-  `[::1]` no longer slips through the redirect rule either, where the brackets
-  were being read as part of a hostname.
-- A skipped avatar says why. Every failure — a 404, a timeout, a refused address
-  — was reported as "avatar could not be fetched", which does not tell anyone
-  whether to fix a typo, a permission, or a URL. The fetcher already worked out
-  the reason; now it survives as far as the log.
-- A control character in a name, role or section title no longer costs the whole
-  file. XML carries three of them and no parser will read a document holding any
-  of the others, but `HTML.escape` leaves them alone because in HTML they are
-  legal — so one stray byte in a display name did not garble a label, it made the
-  mural unreadable, with the run still exiting 0 and still committing. They are
-  dropped now, in the one place every name, role and title passes through, which
-  also covers the API-sourced names that never reach config validation.
+  fetched and embedded. Only redirects were checked before, and a host is now
+  judged by the addresses it resolves to, not by how it is spelled.
+- A control character in a name, role or section title is dropped instead of
+  making the whole SVG unparseable — with the run still exiting 0.
+- `spiral` and `orbit` no longer overlap avatars: each one now slides clear of
+  what is already placed, which used to happen only under `scale`.
+- Repository and organisation names are validated before going into an API path.
+- Config the parser would read past and throw away is refused, `sort` reaches
+  the two styles that re-sorted behind it, and `grid` sections line up on one
+  column.
+- Unreadable files, oversized avatars, and a `weave` with no role lines report a
+  reason instead of a stack trace or silence — as does any skipped avatar, which
+  used to say only "avatar could not be fetched".
+- A user returned by more than one source keeps a real display name instead of
+  a login, and two outputs spelling the same file differently (`./wall.svg`,
+  `wall.svg`) are rejected as duplicates rather than silently overwriting.
+- Woven `metro` lines each get a rail column of their own, and `skyline` caps
+  its window rows.
+- Leaked file handles are closed, the workspace is marked safe once per run
+  rather than once per output, and the README's config reference is now a config
+  the parser accepts — the specs validate every config the docs show.
 
 ### Changed
 
-- Pagination stops fanning out past what `max` can use. A window is requested
-  before any of it is read, so a `max` that ended two pages in used to buy four
-  and discard two — up to three wasted requests per source, against a quota of
-  sixty an hour without a token. Results are unchanged: a page whose contents
-  are filtered away still sends the walk round again.
-- `voronoi` no longer clips every cell against every other seed. A seed too far
-  off to reach what is left of a cell is ruled out by a bound the weight clamp
-  already guarantees, and the clipper works out of two buffers instead of
-  allocating the polygon afresh for each of those cuts. A wall of 4000 faces
-  renders in half the time, one of 600 in a third.
-- `mosaic` packing starts at the first row that still has a free cell instead of
-  rescanning the filled rows from the top for every avatar. A wall of 4000 faces
-  packs in an eighth of the time.
-
-Both are exact: the same seeds cut the same cells and every avatar lands in the
-same square, so a regenerated mural is byte for byte the file it was before.
+- Pagination stops fanning out past what `max` can use, saving up to three
+  requests per source against an hourly quota of sixty without a token.
+- `voronoi` clipping and `mosaic` packing are faster: a wall of 4000 faces
+  renders in half the time and packs in an eighth. Both are exact, so a
+  regenerated mural is byte for byte the file it was before.
 
 ## v1.1.2
 
