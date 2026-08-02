@@ -7,6 +7,8 @@ and the generated files.
 
 ## Unreleased
 
+## v1.2.1
+
 ### Added
 
 - `voronoi` takes a `rows` count. Left unset nothing changes — `cell_size` sets
@@ -14,7 +16,6 @@ and the generated files.
   lets the cells take up the slack instead, so a crowded wall can spread over
   more rows rather than packing more faces across the same width.
 
-## v1.2.1
 
 ## v1.2.0
 
