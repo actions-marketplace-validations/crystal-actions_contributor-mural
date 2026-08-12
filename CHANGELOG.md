@@ -7,6 +7,8 @@ and the generated files.
 
 ## Unreleased
 
+## v1.3.0
+
 ### Added
 
 - A `pebble` style: circle packing, where everyone is a disc sized by their rank,
@@ -14,6 +16,17 @@ and the generated files.
   does not fill its rectangle — the page shows between the stones — and it honours
   per-user `scale`. `width` caps how wide the pile may spread rather than fixing it,
   and `density` decides whether the pile reads as packed or scattered.
+
+### Changed
+
+- Avatar markup and the per-document state reset now live on the base renderer
+  instead of being hand-rolled by each style, so a new style cannot forget to
+  escape a name or to clear what it carries between documents. Output is
+  unchanged to the byte.
+
+### Documentation
+
+- Specs cover the validators, the CLI, and the SVG number format.
 
 ## v1.2.1
 
