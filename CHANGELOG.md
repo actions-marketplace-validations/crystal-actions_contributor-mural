@@ -7,82 +7,45 @@ and the generated files.
 
 ## Unreleased
 
+## v1.4.0
+
 ### Added
 
 - `also_in` on a `users:` entry, naming extra sections a person renders in on
-  top of `group`. Placement used to be exclusive, so the moment someone in a
+  top of `group`. Placement used to be exclusive, so the moment someone on a
   curated `Special Thanks` list landed their first commit you had to pick which
-  wall they belonged on — and both were true, because the two sections answer
-  different questions. `group` stays the primary placement and a single `group`
-  behaves exactly as it always has; an `also_in` section missing from `groups`
-  is a config error, the same as a mistyped `group`. They stay one person
-  everywhere it counts: one avatar fetched, one place in the `sort`, one slot
-  against `limit`, and one copy of the avatar in the file however many sections
-  draw them — a repeated face is written once into the document's `<defs>` and
-  referenced after that, so an extra section costs a line of markup rather than
-  a whole picture. Appearing twice is always something you wrote down: turning
-  on a second source never re-files anyone.
+  wall they belonged on. `group` stays the primary placement, and an `also_in`
+  section missing from `groups` is a config error. They stay one person: one
+  avatar fetched, one place in the `sort`, one slot against `limit`, and a
+  repeated face written once into `<defs>` and referenced after that.
 - `role:` on a source block — `contributors:`, `members:`, `stargazers:` and
   `sponsors:` — giving the role line to everyone that source yields, the way
-  `group:` and `weight:` already do. Without it, a wall that uses roles to say
-  what each person did had to name every code contributor in `users:` purely to
-  write a role next to them, and the day someone landed their first commit they
-  appeared beside those entries with a blank line under their name until a human
-  noticed. A `users:` entry still wins field by field, so the curated list
-  carries the exceptions and nothing else, and a curated entry that names no
-  role inherits the source's. Nothing is assumed: a source that does not name a
-  role leaves the line off, because a role under every face makes the cells
-  taller and the canvas wider. When one person comes from two sources, every
-  field but the weight still comes from the first source that names it — taken
-  field by field, so `contributors: group: Contributors` next to
-  `sponsors: role: Sponsor` files them under Contributors and still says they
-  sponsor.
+  `group:` and `weight:` already do. A `users:` entry still wins field by field,
+  so the curated list carries only the exceptions; a source that names no role
+  leaves the line off.
 - Avatars survive a flaky run. Before writing, the run reads the outputs it is
-  about to replace and keeps every avatar already in them, so anyone whose
-  avatar cannot be fetched this time keeps the face the last wall gave them
-  instead of dropping out of the picture. A throttling host used to take people
-  off the mural and commit the result — a regression over a failure that had
-  usually fixed itself by the time anyone looked. Nothing extra is written or
-  cached between runs and no workflow change is needed: the committed SVG is
-  the cache, and `actions/checkout` is what puts it back in the workspace.
-  A salvaged face does not trip `fail_on_missing`, because nobody left the
-  picture, and someone the current config no longer renders is never read back
-  in, nor is a data URI that is not the exact shape this program writes — a
-  previous wall is a file on disk, and one stray character in an `href` costs
-  the whole document rather than one label. The notice names the logins it
-  salvaged, because an avatar that is gone for good is otherwise invisible.
-  There is nothing to read back from on a first run, on a PNG-only config
-  (a PNG has been rasterized, so its avatars are no longer addressable), or for
-  an output path in `.gitignore`; those drop the person as they always did.
-- A notice when a source stops at its `max`, naming the source and the number
-  to raise. Hitting `max` is the one way a source leaves people out with
-  nothing going wrong, and the only symptom was a contributor who is not on the
-  wall. Only raised with someone actually past the cap in hand: a source
-  holding exactly `max` people has left nobody out.
-- A notice when the contributors API hits GitHub's own 500-person ceiling,
-  which no `max` can lift. The endpoint applies it by answering with a full
-  list rather than an error, so there was nothing to notice before.
+  about to replace and keeps every avatar already in them, so a throttling host
+  no longer takes people off the mural and commits the result. The committed SVG
+  is the cache: nothing extra is written between runs and no workflow change is
+  needed. A salvaged face does not trip `fail_on_missing`, and anyone the
+  current config no longer renders is never read back in. There is nothing to
+  read back on a first run, on a PNG-only config, or for a `.gitignore`d output.
+- A notice when a source stops at its `max`, naming the source and the number to
+  raise — and another when the contributors API hits GitHub's own 500-person
+  ceiling, which no `max` can lift.
 - A warning counting the people whose avatars could not be fetched, on top of
-  the per-person ones. Forty individual warnings scroll past as noise, and a
-  run that lost forty people looked exactly like one that lost none.
+  the per-person ones.
 
 ### Changed
 
 - `limit` now spends itself on the API list before touching `users:`. The cap
   was applied to the ranking alone, so a contributor with enough commits could
-  push a name written down in `users:` off the end of the wall — while the
-  curated list is documented as the one that always wins. Render order is
-  unchanged: survivors come out in the order `sort` put them in. A `limit`
-  below the number of `users:` entries still cuts into them, and now says so.
+  push a name written down in `users:` off the end of the wall. Render order is
+  unchanged; a `limit` below the number of `users:` entries still cuts into
+  them, and now says so.
 - An output whose avatars mostly fail is refused rather than committed missing
   more than half its people; the run exits 1 without touching anything on disk.
-  At that scale the cause is a token, a network, or a host-wide throttle rather
-  than a handful of deleted accounts. Judged per output, since a target whose
-  own avatars all arrived is complete, and only from eight people up — below
-  that a share carries no information, and failing on it would turn ordinary
-  attrition into a workflow that is red forever.
-
-## v1.4.0
+  Judged per output, and only from eight people up.
 
 ## v1.3.0
 
