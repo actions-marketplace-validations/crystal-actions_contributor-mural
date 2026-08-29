@@ -244,4 +244,40 @@ describe ContributorMural::Renderers::Grid do
     # And the labels still have their room: nothing starts at the bare margin.
     columns.first.should be > 8.0
   end
+
+  # `columns: auto` moves with the headcount, so the wall is asserted at the
+  # two sizes that read differently: under `max_columns` it is still one row,
+  # and over it the rows come out even rather than leaving a short one under a
+  # full one.
+  it "draws an auto grid as one row until max_columns" do
+    svg = render(auto_config(6))
+    rows(svg).should eq([6])
+  end
+
+  it "splits an auto grid into even rows past max_columns" do
+    rows(render(auto_config(11))).should eq([6, 5])
+    rows(render(auto_config(16))).should eq([8, 8])
+  end
+end
+
+# People per row, top row first, read off the drawn avatars rather than the
+# arithmetic that placed them.
+private def rows(svg : String) : Array(Int32)
+  ys = svg.scan(/<image [^>]*y="([0-9.]+)"/).map(&.[1].to_f)
+  ys.group_by(&.itself).to_a.sort_by(&.[0]).map(&.[1].size)
+end
+
+private def auto_config(count : Int32) : ContributorMural::Config
+  logins = (1..count).join("\n") { |i| "  - login: user#{i}" }
+  ContributorMural::Config.parse(<<-YAML)
+    sort: none
+    users:
+    #{logins}
+    grid:
+      columns: auto
+      max_columns: 10
+      avatar_size: 48
+      margin: 8
+      show_names: false
+    YAML
 end

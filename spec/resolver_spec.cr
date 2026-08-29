@@ -44,6 +44,23 @@ describe ContributorMural::Resolver do
     users.map(&.login).should eq(["charlie", "Alpha", "bravo"])
   end
 
+  # A curated entry defaults to a weight of 1, which is also what the
+  # contributors API reports for a single commit — so someone thanked for a bug
+  # report used to land in the middle of the people who wrote code, separated
+  # from them by nothing but the alphabet. `weight: 0` is the rung no API can
+  # report from, and it puts them behind everyone a source measured.
+  it "sorts a weight of 0 behind everyone a source measured" do
+    config = config_from(<<-YAML)
+      users:
+        - login: reporter
+          weight: 0
+        - login: maintainer
+      YAML
+
+    users = ContributorMural::Resolver.resolve(config, [api_user("committer", weight: 1)])
+    users.map(&.login).should eq(["committer", "maintainer", "reporter"])
+  end
+
   it "sorts by login when requested" do
     config = config_from(<<-YAML)
       sort: login

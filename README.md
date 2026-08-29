@@ -122,12 +122,19 @@ grid:
 
 | Option | Default | Accepts |
 | ------ | ------- | ------- |
-| `columns` | `8` | 1–100 |
+| `columns` | `8` | 1–100, or `auto` |
+| `max_columns` | `10` | 1–100; the widest row `auto` will draw |
 | `avatar_size` | `64` | 8–512 |
 | `shape` | `circle` | `circle`, `rounded`, `square` |
 | `margin` | `8` | 0–200 |
 | `show_names` | `true` | draws the name under each avatar |
 | `truncate` | `12` | max name length; `0` disables truncation |
+
+**`columns: auto`** lets the headcount pick the width, so a growing wall does not have to
+be re-tuned by hand: it stays a single row until `max_columns`, then splits into the fewest
+rows that hold everyone and shares them out evenly — eleven people are 6 and 5 rather than
+10 and a lone face underneath. Either way the number is a ceiling rather than a promise:
+three people have never been drawn four columns wide.
 
 **`shape`**
 
@@ -609,7 +616,8 @@ Write a block to enable it. Everything merges into one list, then `exclude`, `so
 users:                      # your curated list — always wins on conflicts
   - login: hahwul
     name: HAHWUL            # optional display name (default: login)
-    weight: 10              # optional, drives mosaic/voronoi sizing and weight sort
+    weight: 10              # optional, drives mosaic/voronoi sizing and weight sort;
+                            # 0 ranks behind everyone an API source measured
     scale: 1.6              # optional 1–2 size multiplier (mosaic, spiral, orbit,
                             # constellation, skyline)
     role: Creator           # optional label under the name
@@ -653,7 +661,7 @@ sponsors:                   # GitHub Sponsors (needs a token)
 
 | Source | Requires | Weight comes from |
 | ------ | -------- | ----------------- |
-| `users` | — | your `weight:`, else `1` |
+| `users` | — | your `weight:`, else `1`; `0` sits behind every source |
 | `contributors` | — (token lifts rate limits, reaches private repos) | commit count |
 | `members` | `org:`; a `read:org` token for non-public members | none (`1`) |
 | `stargazers` | — | none (`1`), returned oldest-first |
@@ -714,6 +722,13 @@ sort: weight                # weight | login | none (none keeps list order)
 limit: 60                   # cap rendered users after merge and sort; `users:` first
 fail_on_missing: false      # true: fail the run when an avatar cannot be fetched
 ```
+
+**`weight: 0` is the rung below every source.** GitHub counts a contributor from one commit
+up and a sponsor from one dollar up, so a curated entry left at the default `1` weighs
+exactly as much as whoever has a single commit — and under `sort: weight` the two are
+separated by nothing but the alphabet, which is how someone thanked for a bug report ends
+up sitting in the middle of the people who wrote code. Give the entries with no commits
+`weight: 0` and they stay behind everyone a source measured, wherever the list goes next.
 
 **`exclude` patterns.** Entries match logins case-insensitively. An entry containing `*`
 (any run of characters) or `?` (exactly one) is a wildcard; anything else is an exact
@@ -866,7 +881,8 @@ output: CONTRIBUTOR_MURAL.svg    # path relative to the repository root
 users:                      # your curated list
   - login: hahwul           # required — GitHub login
     name: HAHWUL            # optional display name (default: login)
-    weight: 10              # optional, drives mosaic sizing + weight sort
+    weight: 10              # optional, drives mosaic sizing + weight sort; 0 ranks
+                            # behind everyone an API source measured
     scale: 1.6              # optional 1–2 size multiplier for this person alone;
                             # honoured by mosaic, spiral, orbit, constellation,
                             # skyline, and pebble
@@ -935,7 +951,9 @@ outputs:                    # optional: render several files in one run
     mode: dark              # optional per-output light/dark override
 
 grid:
-  columns: 8
+  columns: 8                # a number, or `auto`: one row until `max_columns`,
+                            # then the fewest even rows that hold everyone
+  max_columns: 10           # widest row `columns: auto` draws; ignored otherwise
   avatar_size: 64
   shape: circle             # circle | rounded | square
   margin: 8

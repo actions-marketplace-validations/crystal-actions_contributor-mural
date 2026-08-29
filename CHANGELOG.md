@@ -7,6 +7,24 @@ and the generated files.
 
 ## Unreleased
 
+### Added
+
+- `columns: auto` on the grid, with `max_columns` (default `10`) naming the widest row it
+  will draw. A written-down column count has to be re-tuned every time the wall grows: a
+  tidy row of eight becomes eight and a lone face underneath the day the ninth person
+  arrives. `auto` keeps the wall on one row until `max_columns`, then splits it into the
+  fewest rows that hold everyone and shares them out evenly — eleven people are 6 and 5. A
+  number still behaves exactly as it did, including as a ceiling a short list never fills.
+
+### Changed
+
+- `weight: 0` is accepted, on a `users:` entry and on a source block. The floor used to be
+  1, which is also what the contributors API reports for a single commit — so a curated
+  entry for someone with no commits weighed the same as whoever has exactly one, and
+  `sort: weight` separated them by nothing but the alphabet. That is how a person thanked
+  for a bug report ends up in the middle of the people who wrote code. 0 is the rung no
+  source can report from, so it sorts behind every one of them.
+
 ## v1.4.0
 
 ### Added

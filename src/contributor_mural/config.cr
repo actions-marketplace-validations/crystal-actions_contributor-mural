@@ -264,8 +264,14 @@ module ContributorMural
       users.each do |user|
         errors << "user entry with empty `login`" if user.login.strip.empty?
         errors << "duplicate user login: #{user.login}" unless seen.add?(user.login.downcase)
+        # 0 is the rung below everything a source can report: GitHub counts a
+        # contributor from one commit up and a sponsor from one dollar up, so
+        # the only people who can stand there are the ones no source measured.
+        # Without it, someone credited for a bug report weighs exactly as much
+        # as whoever has a single commit, and the two of them are separated by
+        # nothing but the alphabet.
         if weight = user.weight
-          errors << "user #{user.login}: `weight` must be >= 1" if weight < 1
+          errors << "user #{user.login}: `weight` must be >= 0" if weight < 0
         end
         # Emphasis, not free rein: past 2x one avatar starts deciding the
         # layout for everyone else, and every style here has to keep the
@@ -504,7 +510,7 @@ module ContributorMural
     # in an error message.
     def validate_defaults(errors : Array(String), section : String) : Nil
       if value = weight
-        errors << "#{section} `weight` must be >= 1" if value < 1
+        errors << "#{section} `weight` must be >= 0" if value < 0
       end
       # A blank role is not "no role": it draws an empty line under every face
       # and grows the cell to hold it, which reads as a rendering bug rather
@@ -563,11 +569,52 @@ module ContributorMural
     end
   end
 
+  # A grid width: a fixed number of columns, or `auto` to let the headcount
+  # decide.
+  #
+  # Its own type rather than a nilable Int32, because nil already means "the key
+  # was left out" everywhere else in this file, and `auto` is the opposite of
+  # that — a decision written down, asking the wall to re-decide its width every
+  # time the list grows.
+  struct ColumnCount
+    AUTO = "auto"
+
+    # nil is `auto`: no width was named, so the renderer picks one per wall.
+    getter fixed : Int32?
+
+    def initialize(@fixed : Int32?)
+    end
+
+    def self.auto : self
+      new(nil)
+    end
+
+    def auto? : Bool
+      fixed.nil?
+    end
+
+    def self.new(ctx : YAML::ParseContext, node : YAML::Nodes::Node) : self
+      unless node.is_a?(YAML::Nodes::Scalar)
+        node.raise "Expected a number or #{AUTO.inspect}"
+      end
+      return auto if node.value == AUTO
+      new(node.value.to_i32? ||
+          node.raise("Expected a number or #{AUTO.inspect}, not #{node.value.inspect}"))
+    end
+
+    def to_yaml(yaml : YAML::Nodes::Builder) : Nil
+      (fixed || AUTO).to_yaml(yaml)
+    end
+  end
+
   class GridConfig
     include YAML::Serializable
     include YAML::Serializable::Strict
 
-    property columns : Int32 = 8
+    property columns : ColumnCount = ColumnCount.new(8)
+    # The widest row `columns: auto` will draw, and read only then — a number
+    # under `columns` has already said how wide the wall gets.
+    property max_columns : Int32 = 10
     property avatar_size : Int32 = 64
     property shape : Shape = Shape::Circle
     property margin : Int32 = 8
@@ -577,9 +624,30 @@ module ContributorMural
     def initialize
     end
 
+    # How many columns `count` people are drawn in.
+    #
+    # A written-down `columns` has always been a ceiling rather than a promise:
+    # three people have never been drawn four columns wide. `auto` keeps that
+    # and picks the ceiling too — the wall stays one row until `max_columns`,
+    # then splits into the fewest rows that hold everyone and shares them out
+    # evenly, so eleven people are 6 and 5 rather than 10 and a lone face
+    # underneath.
+    def columns_for(count : Int32) : Int32
+      return 1 if count <= 1
+      if fixed = columns.fixed
+        return Math.min(fixed, count)
+      end
+      cap = Math.min(max_columns, count)
+      rows = (count + cap - 1) // cap
+      (count + rows - 1) // rows
+    end
+
     def validate : Array(String)
       errors = [] of String
-      errors << "grid `columns` must be between 1 and 100" unless (1..100).includes?(columns)
+      if fixed = columns.fixed
+        errors << "grid `columns` must be between 1 and 100, or `auto`" unless (1..100).includes?(fixed)
+      end
+      errors << "grid `max_columns` must be between 1 and 100" unless (1..100).includes?(max_columns)
       errors << "grid `avatar_size` must be between 8 and 512" unless (8..512).includes?(avatar_size)
       errors << "grid `margin` must be between 0 and 200" unless (0..200).includes?(margin)
       errors << "grid `truncate` must be >= 0" if truncate < 0

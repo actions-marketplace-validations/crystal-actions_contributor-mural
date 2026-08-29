@@ -23,8 +23,10 @@ end
 # {config fragment, expected fragment of the error}
 private REJECTED = [
   # grid
-  {"grid:\n  columns: 0", "grid `columns` must be between 1 and 100"},
-  {"grid:\n  columns: 101", "grid `columns` must be between 1 and 100"},
+  {"grid:\n  columns: 0", "grid `columns` must be between 1 and 100, or `auto`"},
+  {"grid:\n  columns: 101", "grid `columns` must be between 1 and 100, or `auto`"},
+  {"grid:\n  max_columns: 0", "grid `max_columns` must be between 1 and 100"},
+  {"grid:\n  max_columns: 101", "grid `max_columns` must be between 1 and 100"},
   {"grid:\n  avatar_size: 7", "grid `avatar_size` must be between 8 and 512"},
   {"grid:\n  avatar_size: 513", "grid `avatar_size` must be between 8 and 512"},
   {"grid:\n  margin: -1", "grid `margin` must be between 0 and 200"},
@@ -150,6 +152,8 @@ private REJECTED = [
 private ACCEPTED = [
   "grid:\n  columns: 1\n  avatar_size: 8\n  margin: 0\n  truncate: 0",
   "grid:\n  columns: 100\n  avatar_size: 512\n  margin: 200",
+  "grid:\n  columns: auto\n  max_columns: 1",
+  "grid:\n  columns: auto\n  max_columns: 100",
   "honeycomb:\n  columns: 1\n  cell_size: 8\n  gap: 0",
   "honeycomb:\n  columns: 100\n  cell_size: 512\n  gap: 200",
   "mosaic:\n  width: 8000\n  base_cell: 8\n  gap: 0\n  tiers: [1]",

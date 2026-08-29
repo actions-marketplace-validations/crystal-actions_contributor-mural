@@ -12,7 +12,8 @@ describe ContributorMural::Config do
       config.fail_on_missing?.should be_false
       config.users.size.should eq(1)
       config.users.first.login.should eq("hahwul")
-      config.grid.columns.should eq(8)
+      config.grid.columns.fixed.should eq(8)
+      config.grid.max_columns.should eq(10)
       config.grid.shape.should eq(ContributorMural::Shape::Circle)
       config.honeycomb.cell_size.should eq(72)
       config.mosaic.tiers.should eq([3, 2, 1])
@@ -197,7 +198,7 @@ describe ContributorMural::Config do
       config = ContributorMural::Config.parse(<<-YAML)
         users:
           - login: hahwul
-            weight: 0
+            weight: -1
         limit: 0
         grid:
           columns: 0
@@ -205,7 +206,7 @@ describe ContributorMural::Config do
 
       error = expect_raises(ContributorMural::ConfigError) { config.validate! }
       message = error.message || ""
-      message.should contain("`weight` must be >= 1")
+      message.should contain("`weight` must be >= 0")
       message.should contain("`limit` must be >= 1")
       message.should contain("grid `columns` must be between 1 and 100")
     end
@@ -256,18 +257,34 @@ describe ContributorMural::Config do
       message.should contain("user ksg97031: `scale` must be between 1 and 2")
     end
 
-    it "rejects a source weight below 1" do
+    it "rejects a source weight below 0" do
       config = ContributorMural::Config.parse(<<-YAML)
         contributors:
-          weight: 0
+          weight: -1
         sponsors:
           weight: -3
         YAML
 
       error = expect_raises(ContributorMural::ConfigError) { config.validate! }
       message = error.message || ""
-      message.should contain("contributors `weight` must be >= 1")
-      message.should contain("sponsors `weight` must be >= 1")
+      message.should contain("contributors `weight` must be >= 0")
+      message.should contain("sponsors `weight` must be >= 0")
+    end
+
+    # The rung below everything a source reports: GitHub counts a contributor
+    # from one commit up, so 0 is the only value a curated entry can hold that
+    # no measured person can tie with.
+    it "accepts a weight of 0 on a curated entry and on a source" do
+      config = ContributorMural::Config.parse(<<-YAML)
+        users:
+          - login: hahwul
+            weight: 0
+        stargazers:
+          weight: 0
+        YAML
+
+      config.validate!
+      config.users.first.weight.should eq(0)
     end
 
     it "parses role and group fields" do
@@ -498,5 +515,61 @@ describe "local avatar validation" do
     message.should contain("user a: local `avatar_url`")
     message.should contain("user b: local `avatar_url`")
     message.should_not contain("user c")
+  end
+end
+
+# `columns: auto` is the only config value that decides a number rather than
+# being one, so its arithmetic is asserted here rather than only through a
+# rendered wall.
+private def grid(yaml : String) : ContributorMural::GridConfig
+  ContributorMural::Config.parse("users:\n  - login: a\ngrid:\n#{yaml}").grid
+end
+
+describe "grid columns" do
+  it "reads a fixed count as a ceiling, never wider than the headcount" do
+    fixed = grid("  columns: 8")
+    fixed.columns.auto?.should be_false
+    fixed.columns_for(3).should eq(3)
+    fixed.columns_for(8).should eq(8)
+    fixed.columns_for(20).should eq(8)
+  end
+
+  it "keeps an auto wall on one row until max_columns, then splits it evenly" do
+    auto = grid("  columns: auto")
+    auto.columns.auto?.should be_true
+    auto.columns_for(6).should eq(6)
+    auto.columns_for(10).should eq(10)
+    # 11 people are 6 and 5, not 10 and a lone face underneath.
+    auto.columns_for(11).should eq(6)
+    auto.columns_for(16).should eq(8)
+    auto.columns_for(30).should eq(10)
+  end
+
+  it "honours max_columns as the widest auto row" do
+    auto = grid("  columns: auto\n  max_columns: 4")
+    auto.columns_for(4).should eq(4)
+    auto.columns_for(5).should eq(3)
+    auto.columns_for(12).should eq(4)
+  end
+
+  # Rows divide by the column count, so a wall nobody is on must not ask for
+  # zero columns.
+  it "never reports fewer than one column" do
+    grid("  columns: auto").columns_for(0).should eq(1)
+    grid("  columns: 8").columns_for(0).should eq(1)
+  end
+
+  it "names `auto` when the value is neither a number nor it" do
+    error = expect_raises(ContributorMural::ConfigError) do
+      ContributorMural::Config.parse("users:\n  - login: a\ngrid:\n  columns: nine\n")
+    end
+    (error.message || "").should contain(%(Expected a number or "auto", not "nine"))
+  end
+
+  it "rejects a fixed count outside the range, naming auto as the alternative" do
+    error = expect_raises(ContributorMural::ConfigError) do
+      ContributorMural::Config.parse("users:\n  - login: a\ngrid:\n  columns: 101\n").validate!
+    end
+    (error.message || "").should contain("grid `columns` must be between 1 and 100, or `auto`")
   end
 end

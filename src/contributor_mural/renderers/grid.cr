@@ -34,7 +34,7 @@ module ContributorMural::Renderers
 
     protected def block_size(users : Array(EmbeddedUser)) : {Float64, Float64}
       grid = @config.grid
-      cols = Math.min(grid.columns, users.size)
+      cols = grid.columns_for(users.size)
       rows = (users.size + cols - 1) // cols
       cell_h = grid.avatar_size + label_height(users)
       width = cols * grid.avatar_size + (cols + 1) * grid.margin
@@ -46,7 +46,7 @@ module ContributorMural::Renderers
 
     protected def draw_block(io : String::Builder, users : Array(EmbeddedUser), y_offset : Float64) : Nil
       grid = @config.grid
-      cols = Math.min(grid.columns, users.size)
+      cols = grid.columns_for(users.size)
       cell_w = grid.avatar_size
       cell_h = grid.avatar_size + label_height(users)
       clipped = !grid.shape.square?
