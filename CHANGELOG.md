@@ -82,6 +82,8 @@ and the generated files.
   that a share carries no information, and failing on it would turn ordinary
   attrition into a workflow that is red forever.
 
+## v1.4.0
+
 ## v1.3.0
 
 ### Added
