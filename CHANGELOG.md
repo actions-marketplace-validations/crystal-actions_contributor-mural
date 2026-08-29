@@ -7,6 +7,8 @@ and the generated files.
 
 ## Unreleased
 
+## v1.5.0
+
 ### Added
 
 - `columns: auto` on the grid, with `max_columns` (default `10`) naming the widest row it
